@@ -1,0 +1,5 @@
+# RSS Sources Configuration
+sources:
+  - name: "Example RSS Feed"
+    url: "https://example.com/rss"
+    category: "news"

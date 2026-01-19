@@ -1,0 +1,5 @@
+# Requirements
+feedparser
+pydantic
+pyyaml
+requests
