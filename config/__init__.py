@@ -1,0 +1,31 @@
+"""Config package for FinAgent."""
+
+from .settings import (
+    RSS_SOURCES,
+    OLLAMA_URL,
+    MODEL_NAME,
+    LLM_TIMEOUT,
+    MAX_EVENTS,
+    EVENT_TYPES,
+    CONTENT_INTENTS,
+    LOG_DIR,
+    EVENTS_LOG_FILE,
+    EVALUATIONS_LOG_FILE
+)
+from .prompts import SYSTEM_PROMPT, INTENT_TASKS, FORBIDDEN_PHRASES
+
+__all__ = [
+    "RSS_SOURCES",
+    "OLLAMA_URL",
+    "MODEL_NAME",
+    "LLM_TIMEOUT",
+    "MAX_EVENTS",
+    "EVENT_TYPES",
+    "CONTENT_INTENTS",
+    "LOG_DIR",
+    "EVENTS_LOG_FILE",
+    "EVALUATIONS_LOG_FILE",
+    "SYSTEM_PROMPT",
+    "INTENT_TASKS",
+    "FORBIDDEN_PHRASES"
+]

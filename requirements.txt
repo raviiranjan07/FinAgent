@@ -1,5 +1,28 @@
-# Requirements
-feedparser
-pydantic
-pyyaml
-requests
+# FinAgent Requirements
+# POC + Pre-MVP dependencies
+
+# Core
+feedparser>=6.0.0
+pydantic>=2.0.0
+pyyaml>=6.0
+requests>=2.28.0
+
+# Database (Pre-MVP)
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+pgvector>=0.2.0
+
+# API (Pre-MVP)
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# Embeddings (optional - can use Ollama instead)
+# sentence-transformers>=2.2.0
+
+# Utilities
+numpy>=1.24.0
+python-dotenv>=1.0.0
+
+# Development
+pytest>=7.0.0
+pytest-cov>=4.0.0
