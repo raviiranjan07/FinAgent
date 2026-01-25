@@ -35,20 +35,43 @@ async def list_outputs(
     with get_db_session() as db:
         repo = RepositoryManager(db)
 
-        # Get outputs based on filters
+        # Get outputs based on filters (sorted by event published date)
+        from sqlalchemy import desc
+        from database.models import Output, Event
+
         if pending_only:
-            outputs = repo.outputs.get_unevaluated(limit=page_size * page)
-        elif hitl_only:
-            outputs = repo.outputs.get_pending_review(limit=page_size * page)
-        elif event_type:
-            outputs = repo.outputs.get_by_event_type(event_type, limit=page_size * page)
-        else:
-            # Get all recent outputs
-            from sqlalchemy import desc
-            from database.models import Output
             outputs = (
                 db.query(Output)
-                .order_by(desc(Output.created_at))
+                .join(Event, Output.event_id == Event.id)
+                .filter(Output.evaluations == None)
+                .order_by(desc(Event.published_at))
+                .limit(page_size * page)
+                .all()
+            )
+        elif hitl_only:
+            outputs = (
+                db.query(Output)
+                .join(Event, Output.event_id == Event.id)
+                .filter(Output.hitl_required == True)
+                .order_by(desc(Event.published_at))
+                .limit(page_size * page)
+                .all()
+            )
+        elif event_type:
+            outputs = (
+                db.query(Output)
+                .join(Event, Output.event_id == Event.id)
+                .filter(Output.event_type == event_type)
+                .order_by(desc(Event.published_at))
+                .limit(page_size * page)
+                .all()
+            )
+        else:
+            # Get all recent outputs sorted by event published date
+            outputs = (
+                db.query(Output)
+                .join(Event, Output.event_id == Event.id)
+                .order_by(desc(Event.published_at))
                 .limit(page_size * page)
                 .all()
             )
@@ -68,6 +91,11 @@ async def list_outputs(
             has_evaluation = len(output.evaluations) > 0 if output.evaluations else False
             evaluation_verdict = output.evaluations[0].verdict if has_evaluation else None
 
+            # Calculate AI-human agreement
+            ai_human_agreement = None
+            if has_evaluation and output.suggested_verdict:
+                ai_human_agreement = output.suggested_verdict == evaluation_verdict
+
             items.append(OutputResponse(
                 id=str(output.id),
                 event_id=str(output.event_id),
@@ -83,6 +111,10 @@ async def list_outputs(
                 event_published_at=output.event.published_at if output.event else None,
                 has_evaluation=has_evaluation,
                 evaluation_verdict=evaluation_verdict,
+                suggested_verdict=output.suggested_verdict,
+                suggested_verdict_reason=output.suggested_verdict_reason,
+                ai_human_agreement=ai_human_agreement,
+                generation_metadata=output.generation_metadata,
             ))
 
         return OutputListResponse(
@@ -141,6 +173,22 @@ async def get_output(output_id: str):
 
         has_evaluation = evaluation_response is not None
 
+        # Calculate AI-human agreement
+        ai_human_agreement = None
+        agreement_details = None
+
+        if has_evaluation and output.suggested_verdict and evaluation_response:
+            ai_human_agreement = output.suggested_verdict == evaluation_response.verdict
+
+            # Build full agreement comparison
+            agreement_details = {
+                "agreed": ai_human_agreement,
+                "ai_verdict": output.suggested_verdict,
+                "ai_reason": output.suggested_verdict_reason,
+                "human_verdict": evaluation_response.verdict,
+                "human_reason": evaluation_response.failure_reason,
+            }
+
         return OutputDetailResponse(
             id=str(output.id),
             event_id=str(output.event_id),
@@ -153,10 +201,16 @@ async def get_output(output_id: str):
             created_at=output.created_at,
             event_title=output.event.title if output.event else None,
             event_source=output.event.source if output.event else None,
+            event_published_at=output.event.published_at if output.event else None,
             has_evaluation=has_evaluation,
             evaluation_verdict=evaluation_response.verdict if evaluation_response else None,
+            suggested_verdict=output.suggested_verdict,
+            suggested_verdict_reason=output.suggested_verdict_reason,
+            ai_human_agreement=ai_human_agreement,
+            generation_metadata=output.generation_metadata,
             event=event_response,
             evaluation=evaluation_response,
+            agreement_details=agreement_details,
         )
 
 

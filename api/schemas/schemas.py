@@ -64,6 +64,13 @@ class OutputResponse(OutputBase):
     event_published_at: Optional[datetime] = None
     has_evaluation: bool = False
     evaluation_verdict: Optional[str] = None
+    # HITL AI suggestion fields
+    suggested_verdict: Optional[str] = None
+    suggested_verdict_reason: Optional[str] = None
+    # Agreement field (computed: suggested == actual)
+    ai_human_agreement: Optional[bool] = None
+    # Generation metadata (audit trail)
+    generation_metadata: Optional[dict] = None
 
     class Config:
         from_attributes = True
@@ -82,6 +89,8 @@ class OutputDetailResponse(OutputResponse):
     """Detailed output response with full event data."""
     event: Optional[EventResponse] = None
     evaluation: Optional["EvaluationResponse"] = None
+    # Agreement details (full comparison)
+    agreement_details: Optional[dict] = None
 
 
 # ============================================================================
@@ -163,6 +172,44 @@ class DashboardStats(BaseModel):
     sources: List[SourceStats]
     failure_reasons: List[FailureReasonStats]
     recent_activity: dict
+
+
+# ============================================================================
+# HITL Agreement Metrics Schemas
+# ============================================================================
+
+class AgreementMetrics(BaseModel):
+    """HITL agreement metrics between AI and human."""
+    total: int
+    agreements: int
+    disagreements: int
+    agreement_rate: float  # Percentage
+    false_positive_rate: float  # AI says PASS, human says FAIL
+    confusion_matrix: dict  # {"PP": int, "PF": int, "FP": int, "FF": int}
+
+
+class DisagreementExample(BaseModel):
+    """Example where AI and human disagreed."""
+    output_id: str
+    event_type: str
+    intent: str
+    suggested_verdict: str
+    actual_verdict: str
+    suggested_reason: Optional[str] = None
+    actual_failure_reason: Optional[str] = None
+    llm_output_preview: str
+    evaluated_at: datetime
+
+
+class HITLMetrics(BaseModel):
+    """Complete HITL metrics for exit criteria tracking."""
+    overall_metrics: AgreementMetrics
+    recent_metrics: AgreementMetrics  # Last 30 evaluations
+    target_rate: float  # 90.0
+    status: str  # "on_track" | "needs_improvement" | "achieved"
+    progress_percentage: float  # (current / target) * 100
+    remaining_to_target: float  # Percentage points
+    disagreement_examples: List[DisagreementExample]
 
 
 # Update forward references

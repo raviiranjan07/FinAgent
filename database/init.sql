@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS content_queue (
     event_id UUID REFERENCES events(id) ON DELETE CASCADE,
     output_id UUID REFERENCES outputs(id) ON DELETE CASCADE,
     status VARCHAR(20) NOT NULL DEFAULT 'pending'
-        CHECK (status IN ('pending', 'approved', 'rejected', 'scheduled', 'published')),
+        CHECK (status IN ('pending', 'approved', 'rejected', 'generating', 'ready_to_schedule', 'scheduled', 'published')),
     edited_content TEXT,
     scheduled_for TIMESTAMP,
     published_at TIMESTAMP,
@@ -59,6 +59,20 @@ CREATE TABLE IF NOT EXISTS content_queue (
     platform_post_id VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Generated content table: Platform-specific formatted content
+CREATE TABLE IF NOT EXISTS generated_content (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    output_id UUID REFERENCES outputs(id) ON DELETE CASCADE,
+    content_queue_id UUID REFERENCES content_queue(id) ON DELETE CASCADE,
+    platform VARCHAR(50) NOT NULL,
+    content_text TEXT NOT NULL,
+    hashtags JSONB DEFAULT '[]',
+    character_count INTEGER,
+    format_style VARCHAR(50),
+    generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Indexes for performance
@@ -69,6 +83,9 @@ CREATE INDEX IF NOT EXISTS idx_outputs_event_id ON outputs(event_id);
 CREATE INDEX IF NOT EXISTS idx_outputs_event_type ON outputs(event_type);
 CREATE INDEX IF NOT EXISTS idx_evaluations_verdict ON evaluations(verdict);
 CREATE INDEX IF NOT EXISTS idx_content_queue_status ON content_queue(status);
+CREATE INDEX IF NOT EXISTS idx_generated_content_platform ON generated_content(platform);
+CREATE INDEX IF NOT EXISTS idx_generated_content_output_id ON generated_content(output_id);
+CREATE INDEX IF NOT EXISTS idx_generated_content_queue_id ON generated_content(content_queue_id);
 
 -- Vector similarity index (IVFFlat for faster approximate search)
 -- Note: Run this after inserting initial data for better performance

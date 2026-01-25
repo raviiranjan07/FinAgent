@@ -56,3 +56,11 @@ outputs/
 # Logs
 logs/
 *.jsonl
+
+# Windows reserved names (accidental files)
+nul
+api/nul
+
+# Backup files
+*.backup
+*.sql

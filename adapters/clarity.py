@@ -5,6 +5,7 @@ from typing import List
 from adapters.base import BaseAdapter
 from adapters.context import ExecutionContext
 from config.prompts import FORBIDDEN_PHRASES, ADVICE_PATTERNS
+from utils.forbidden_words import detect_forbidden_phrases, format_forbidden_phrase_issues
 
 
 class ClarityAdapter(BaseAdapter):
@@ -51,10 +52,11 @@ class ClarityAdapter(BaseAdapter):
         lower = text.lower()
 
         # 1. Forbidden Language Check (Instant FAIL conditions)
-        # Check always-forbidden phrases (no legitimate context)
-        for phrase in FORBIDDEN_PHRASES:
-            if phrase in lower:
-                issues.append(f"Forbidden language detected: '{phrase}'")
+        # Use smart detection with boundary awareness and whitelisting
+        forbidden_issues = detect_forbidden_phrases(text)
+        if forbidden_issues:
+            formatted_issues = format_forbidden_phrase_issues(forbidden_issues)
+            issues.extend(formatted_issues)
 
         # 2. Advice Pattern Check (context-aware detection)
         # Catches "you should buy", "recommend selling", etc.
@@ -110,7 +112,7 @@ class ClarityAdapter(BaseAdapter):
         # 5. DESCRIPTIVE specific checks
         if context.intent == "DESCRIPTIVE":
             word_count = len(text.split())
-            if word_count > 300:  # Increased from 180 to allow for context/explanation
+            if word_count > 500:  # Increased to 500 to provide adequate context for content generation
                 issues.append("Too long for descriptive summary")
 
             if any(k in lower for k in [

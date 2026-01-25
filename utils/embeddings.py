@@ -1,5 +1,6 @@
 """Embedding service for semantic similarity detection."""
 
+import time
 import numpy as np
 from typing import List, Optional
 from config.settings import SIMILARITY_MODEL
@@ -25,9 +26,11 @@ class EmbeddingService:
         """Lazy load the embedding model."""
         if self._model is None:
             print(f"Loading embedding model: {SIMILARITY_MODEL}...")
+            start_time = time.time()
             from sentence_transformers import SentenceTransformer
             self._model = SentenceTransformer(SIMILARITY_MODEL)
-            print("Embedding model loaded.")
+            load_time = time.time() - start_time
+            print(f"Embedding model loaded in {load_time:.2f}s")
         return self._model
 
     def encode(self, text: str) -> List[float]:
@@ -41,7 +44,10 @@ class EmbeddingService:
             List of floats (384-dim for MiniLM)
         """
         model = self._load_model()
+        start_time = time.time()
         embedding = model.encode(text, convert_to_numpy=True)
+        encode_time = time.time() - start_time
+        print(f"    [Embedding] Encoded text in {encode_time:.3f}s")
         return embedding.tolist()
 
     def encode_batch(self, texts: List[str]) -> List[List[float]]:
@@ -55,7 +61,10 @@ class EmbeddingService:
             List of embedding vectors
         """
         model = self._load_model()
+        start_time = time.time()
         embeddings = model.encode(texts, convert_to_numpy=True)
+        encode_time = time.time() - start_time
+        print(f"    [Embedding] Batch encoded {len(texts)} texts in {encode_time:.3f}s")
         return [emb.tolist() for emb in embeddings]
 
     @staticmethod

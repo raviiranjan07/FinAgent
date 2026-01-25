@@ -304,6 +304,149 @@ class EvaluationRepository:
         )
         return {reason: count for reason, count in results}
 
+    def get_agreement_metrics(self) -> Dict[str, Any]:
+        """
+        Calculate agreement between AI (suggested_verdict) and human (verdict).
+
+        Returns confusion matrix:
+        - PP (Predicted PASS, Actual PASS): True Negative
+        - PF (Predicted PASS, Actual FAIL): False Negative
+        - FP (Predicted FAIL, Actual PASS): False Positive
+        - FF (Predicted FAIL, Actual FAIL): True Positive
+
+        Also returns:
+        - agreement_rate: % where suggested_verdict == verdict
+        - false_positive_rate: % where AI suggests PASS but human marks FAIL
+        - total_agreements: count where AI and human agree
+        - total_disagreements: count where AI and human disagree
+        """
+        # Query to join outputs and evaluations, compare verdicts
+        results = (
+            self.db.query(
+                Output.suggested_verdict,
+                Evaluation.verdict
+            )
+            .join(Evaluation, Output.id == Evaluation.output_id)
+            .filter(Output.suggested_verdict.isnot(None))
+            .filter(Evaluation.verdict.isnot(None))
+            .all()
+        )
+
+        total = len(results)
+        if total == 0:
+            return {
+                "total": 0,
+                "agreements": 0,
+                "disagreements": 0,
+                "agreement_rate": 0.0,
+                "false_positive_rate": 0.0,
+                "confusion_matrix": {"PP": 0, "PF": 0, "FP": 0, "FF": 0},
+            }
+
+        # Build confusion matrix
+        confusion = {"PP": 0, "PF": 0, "FP": 0, "FF": 0}
+        agreements = 0
+        false_positives = 0
+
+        for ai_verdict, human_verdict in results:
+            # Agreement
+            if ai_verdict == human_verdict:
+                agreements += 1
+
+            # Confusion matrix
+            if ai_verdict == "PASS" and human_verdict == "PASS":
+                confusion["PP"] += 1
+            elif ai_verdict == "PASS" and human_verdict == "FAIL":
+                confusion["PF"] += 1
+                false_positives += 1  # AI says PASS, human says FAIL
+            elif ai_verdict == "FAIL" and human_verdict == "PASS":
+                confusion["FP"] += 1
+            elif ai_verdict == "FAIL" and human_verdict == "FAIL":
+                confusion["FF"] += 1
+
+        disagreements = total - agreements
+        agreement_rate = (agreements / total) * 100
+        false_positive_rate = (false_positives / total) * 100
+
+        return {
+            "total": total,
+            "agreements": agreements,
+            "disagreements": disagreements,
+            "agreement_rate": round(agreement_rate, 2),
+            "false_positive_rate": round(false_positive_rate, 2),
+            "confusion_matrix": confusion,
+        }
+
+    def get_disagreement_examples(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """
+        Get examples where AI and human disagreed, for pattern analysis.
+
+        Returns list of dicts with:
+        - output_id
+        - event_type
+        - intent
+        - suggested_verdict
+        - actual_verdict
+        - suggested_reason
+        - actual_failure_reason
+        - llm_output (truncated)
+        """
+        results = (
+            self.db.query(Output, Evaluation)
+            .join(Evaluation, Output.id == Evaluation.output_id)
+            .filter(Output.suggested_verdict.isnot(None))
+            .filter(Output.suggested_verdict != Evaluation.verdict)
+            .order_by(desc(Evaluation.evaluated_at))
+            .limit(limit)
+            .all()
+        )
+
+        examples = []
+        for output, evaluation in results:
+            examples.append({
+                "output_id": str(output.id),
+                "event_type": output.event_type,
+                "intent": output.intent,
+                "suggested_verdict": output.suggested_verdict,
+                "actual_verdict": evaluation.verdict,
+                "suggested_reason": output.suggested_verdict_reason,
+                "actual_failure_reason": evaluation.failure_reason,
+                "llm_output_preview": output.llm_output[:200] + "..." if len(output.llm_output) > 200 else output.llm_output,
+                "evaluated_at": evaluation.evaluated_at,
+            })
+
+        return examples
+
+    def get_recent_agreement_rate(self, last_n: int = 30) -> Dict[str, Any]:
+        """
+        Get agreement rate for the most recent N evaluations.
+        Useful for tracking improvement over time.
+        """
+        results = (
+            self.db.query(
+                Output.suggested_verdict,
+                Evaluation.verdict
+            )
+            .join(Evaluation, Output.id == Evaluation.output_id)
+            .filter(Output.suggested_verdict.isnot(None))
+            .order_by(desc(Evaluation.evaluated_at))
+            .limit(last_n)
+            .all()
+        )
+
+        total = len(results)
+        if total == 0:
+            return {"total": 0, "agreements": 0, "agreement_rate": 0.0}
+
+        agreements = sum(1 for ai, human in results if ai == human)
+        rate = (agreements / total) * 100
+
+        return {
+            "total": total,
+            "agreements": agreements,
+            "agreement_rate": round(rate, 2),
+        }
+
 
 class ContentQueueRepository:
     """CRUD operations for content queue."""

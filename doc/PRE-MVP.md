@@ -20,8 +20,9 @@
 8. [WebSocket Events](#8-websocket-events)
 9. [Dashboard Application](#9-dashboard-application)
 10. [HITL Workflow](#10-hitl-workflow)
-11. [Exit Criteria](#11-exit-criteria)
-12. [Appendices](#12-appendices)
+11. [Operational Safety Rails](#11-operational-safety-rails)
+12. [Exit Criteria](#12-exit-criteria)
+13. [Appendices](#13-appendices)
 
 ---
 
@@ -56,6 +57,7 @@ The Pre-MVP phase bridges the gap between the successful POC and a production-re
 | Source Expansion | 31 RSS sources configured | COMPLETED |
 | Deduplication | Embedding-based similarity | COMPLETED |
 | Source Prioritization | Category-based quotas | IN PROGRESS |
+| Operational Safety Rails | Kill switch + Generation metadata | PENDING |
 | HITL Exit | 90% agreement rate | PENDING |
 
 ---
@@ -118,6 +120,7 @@ The following remain **unchanged** from POC:
 | Source Prioritization | Category-based quotas and priority ordering |
 | HITL Workflow | Human evaluation with PASS/FAIL verdicts |
 | Statistics & Analytics | Pass rates, failure reasons, progress tracking |
+| **Operational Safety Rails** | **Kill switch for emergency control + Generation metadata for audit trails** |
 
 ## 3.3 Out-of-Scope
 
@@ -139,6 +142,7 @@ Pre-MVP succeeds when:
 2. **Rule Stability** - No new rule types discovered for 7 consecutive days
 3. **False Positive Rate** - Less than 10% false HITL flags
 4. **Infrastructure Complete** - All Pre-MVP features operational
+5. **Operational Safety** - Kill switch and generation metadata implemented and tested
 
 ---
 
@@ -805,9 +809,455 @@ GET /api/stats/hitl-progress
 
 ---
 
-# 11. Exit Criteria
+# 11. Operational Safety Rails
 
-## 11.1 Pre-MVP Exit Conditions
+## 11.1 Overview
+
+Before transitioning to MVP (publishing phase), two critical operational safeguards must be implemented to ensure system reliability, auditability, and emergency control.
+
+These are not features—they are **architectural hygiene** and **operational safety mechanisms**.
+
+---
+
+## 11.2 Kill Switch / Emergency Stop
+
+### Purpose
+
+Ability to **immediately disable content generation or publishing without code deployment**.
+
+### Why Critical
+
+Once MVP publishing begins:
+- A bad prompt could generate unsafe content
+- An LLM API failure could cause cascading errors
+- A regulatory concern might require immediate halt
+- System abuse or security breach needs instant response
+
+**Without a kill switch, the only option is emergency code deployment—too slow and risky.**
+
+### Implementation
+
+**1. Configuration Variables**
+
+```python
+# config/settings.py
+
+CONTENT_GENERATION_ENABLED: bool = os.getenv(
+    "CONTENT_GENERATION_ENABLED",
+    "true"
+).lower() == "true"
+
+PUBLISHING_ENABLED: bool = os.getenv(
+    "PUBLISHING_ENABLED",
+    "false"  # Default OFF until MVP
+).lower() == "true"
+```
+
+**2. System Status API**
+
+```python
+# api/routes/system.py
+
+@router.get("/api/system/status")
+def get_system_status():
+    """Public endpoint - shows system operational status"""
+    return {
+        "status": "operational",
+        "content_generation_enabled": settings.CONTENT_GENERATION_ENABLED,
+        "publishing_enabled": settings.PUBLISHING_ENABLED,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+@router.post("/api/system/content-generation/disable")
+def disable_content_generation(admin_token: str):
+    """Admin only - disable content generation"""
+    if not verify_admin_token(admin_token):
+        raise HTTPException(401, "Unauthorized")
+
+    # Write to .env or config file
+    update_env_variable("CONTENT_GENERATION_ENABLED", "false")
+
+    return {"message": "Content generation disabled", "requires_restart": True}
+
+@router.post("/api/system/publishing/disable")
+def disable_publishing(admin_token: str):
+    """Admin only - emergency stop publishing"""
+    if not verify_admin_token(admin_token):
+        raise HTTPException(401, "Unauthorized")
+
+    update_env_variable("PUBLISHING_ENABLED", "false")
+
+    return {"message": "Publishing disabled immediately"}
+```
+
+**3. Pipeline Enforcement**
+
+```python
+# In run_poc.py (pipeline script)
+
+if not settings.CONTENT_GENERATION_ENABLED:
+    logger.warning("Content generation is DISABLED via kill switch")
+    sys.exit(0)
+
+# In publishing worker (MVP)
+while True:
+    if not settings.PUBLISHING_ENABLED:
+        logger.warning("Publishing is DISABLED via kill switch - worker paused")
+        time.sleep(60)  # Check again in 60 seconds
+        continue
+
+    # Normal publishing logic...
+```
+
+**4. Dashboard Indicator**
+
+```tsx
+// dashboard/src/components/SystemStatus.tsx
+
+function SystemStatus() {
+  const { data: status } = useQuery('/api/system/status');
+
+  return (
+    <div className="system-status">
+      {!status?.content_generation_enabled && (
+        <Alert variant="warning">
+          ⚠️ Content generation is currently DISABLED
+        </Alert>
+      )}
+      {!status?.publishing_enabled && (
+        <Alert variant="info">
+          🛑 Publishing is currently DISABLED
+        </Alert>
+      )}
+    </div>
+  );
+}
+```
+
+### Usage
+
+**To disable content generation (Pre-MVP):**
+```bash
+# Set environment variable
+export CONTENT_GENERATION_ENABLED=false
+
+# Or via API (with admin token)
+curl -X POST http://localhost:8000/api/system/content-generation/disable \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# Restart pipeline
+# No new content will be generated
+```
+
+**To disable publishing (MVP):**
+```bash
+# Emergency stop - no restart needed
+export PUBLISHING_ENABLED=false
+
+# Publishing worker will stop immediately
+# Already-scheduled posts will NOT publish
+```
+
+### Exit Criteria
+
+- ✅ Kill switch implemented for content generation
+- ✅ Kill switch implemented for publishing (MVP)
+- ✅ Admin API endpoints secured
+- ✅ Dashboard shows system status
+- ✅ Tested in staging environment
+
+---
+
+## 11.3 Generation Metadata (Immutable Snapshots)
+
+### Purpose
+
+**Store exact configuration used for every LLM generation** to enable reproducibility, debugging, and audit trails.
+
+### Why Important
+
+**The Problem:**
+- LLM output today: "RBI keeps rates steady..."
+- 3 months later, complaint received
+- Question: "Which prompt version generated this?"
+- Answer: **Unknown** (no metadata stored)
+
+**The Solution:**
+Capture and store the **exact state** of generation at the moment it happened.
+
+### What to Capture
+
+```python
+generation_metadata = {
+    # Model Information
+    "model": "llama3",              # or "gpt-4o-mini"
+    "model_version": "8B",          # Model size/variant
+    "provider": "ollama",            # ollama / openrouter
+
+    # Prompt Configuration
+    "prompt_version": "1.0",        # Frozen prompt version
+    "system_prompt_hash": "a3f2...", # SHA-256 of actual prompt text
+
+    # Generation Parameters
+    "temperature": 0.7,
+    "max_tokens": 512,
+    "top_p": 0.9,
+
+    # Pipeline State
+    "adapter_versions": {
+        "event_type": "1.0",
+        "intent": "1.0",
+        "output": "1.0",
+        "clarity": "1.0"
+    },
+
+    # Timestamps
+    "generated_at": "2026-01-22T10:30:45Z",
+    "generation_duration_ms": 2340,
+
+    # Event Context
+    "event_type": "FINANCE_POLICY",
+    "intent": "EXPLANATORY",
+    "source": "RBI_PRESS"
+}
+```
+
+### Implementation
+
+**1. Database Schema Update**
+
+```python
+# database/models.py - Add to Output model
+
+class Output(Base):
+    __tablename__ = "outputs"
+
+    # ... existing columns ...
+
+    generation_metadata = Column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        comment="Immutable snapshot of generation configuration"
+    )
+```
+
+**Migration:**
+```sql
+-- database/migrations/add_generation_metadata.sql
+
+ALTER TABLE outputs
+ADD COLUMN generation_metadata JSONB DEFAULT '{}';
+
+COMMENT ON COLUMN outputs.generation_metadata IS
+'Immutable snapshot of LLM configuration, prompt version, and generation parameters';
+```
+
+**2. Capture in OutputAdapter**
+
+```python
+# adapters/output.py
+
+class OutputAdapter(BaseAdapter):
+
+    def run(self, event: Event, context: ExecutionContext):
+        # Generate content
+        llm_output = self.llm_service.generate(...)
+
+        # Capture metadata
+        context.generation_metadata = {
+            "model": self.llm_service.model_name,
+            "model_version": self.llm_service.model_version,
+            "provider": self.llm_service.provider,
+            "prompt_version": settings.PROMPT_VERSION,
+            "system_prompt_hash": hashlib.sha256(
+                settings.SYSTEM_PROMPT.encode()
+            ).hexdigest(),
+            "temperature": self.llm_service.temperature,
+            "max_tokens": self.llm_service.max_tokens,
+            "adapter_versions": {
+                "event_type": "1.0",
+                "intent": "1.0",
+                "output": "1.0",
+                "clarity": "1.0"
+            },
+            "generated_at": datetime.utcnow().isoformat(),
+            "generation_duration_ms": duration_ms,
+            "event_type": context.event_type,
+            "intent": context.intent,
+            "source": event.source
+        }
+
+        context.llm_output = llm_output
+```
+
+**3. Store in Database**
+
+```python
+# adapters/database.py
+
+def save_output(context: ExecutionContext):
+    output = Output(
+        event_id=context.event.id,
+        llm_output=context.llm_output,
+        event_type=context.event_type,
+        intent=context.intent,
+        clarity_issues=context.clarity_issues,
+        hitl_required=context.hitl.required,
+        hitl_risk_level=context.hitl.risk_level,
+        generation_metadata=context.generation_metadata  # ← NEW
+    )
+    db.add(output)
+    db.commit()
+```
+
+**4. API Response**
+
+```python
+# api/routes/outputs.py
+
+@router.get("/api/outputs/{output_id}")
+def get_output_detail(output_id: str):
+    output = db.query(Output).filter_by(id=output_id).first()
+
+    return {
+        "id": output.id,
+        "llm_output": output.llm_output,
+        "event_type": output.event_type,
+        # ... other fields ...
+
+        "generation_metadata": output.generation_metadata,  # ← Expose
+
+        # Or hide by default, show on demand
+        "metadata_available": bool(output.generation_metadata)
+    }
+```
+
+**5. Dashboard View (Optional)**
+
+```tsx
+// dashboard/src/pages/OutputDetail.tsx
+
+function OutputMetadata({ metadata }) {
+  return (
+    <Accordion title="🔍 Generation Metadata">
+      <dl>
+        <dt>Model:</dt>
+        <dd>{metadata.model} ({metadata.model_version})</dd>
+
+        <dt>Prompt Version:</dt>
+        <dd>{metadata.prompt_version}</dd>
+
+        <dt>Generated At:</dt>
+        <dd>{new Date(metadata.generated_at).toLocaleString()}</dd>
+
+        <dt>Temperature:</dt>
+        <dd>{metadata.temperature}</dd>
+
+        <dt>Duration:</dt>
+        <dd>{metadata.generation_duration_ms}ms</dd>
+      </dl>
+
+      <details>
+        <summary>Full Metadata (JSON)</summary>
+        <pre>{JSON.stringify(metadata, null, 2)}</pre>
+      </details>
+    </Accordion>
+  );
+}
+```
+
+### Use Cases
+
+**1. Debugging**
+```
+User complaint: "This explanation is confusing"
+→ Check generation_metadata
+→ See: prompt_version = "0.9" (old version)
+→ Conclusion: User saw content from old prompt, since updated
+```
+
+**2. Audit Trail**
+```
+Regulator asks: "How was this content generated?"
+→ Provide: Model, prompt version, parameters, timestamp
+→ Demonstrates: Transparent, documented process
+```
+
+**3. Performance Analysis**
+```
+Query: "Which model version produces best content?"
+→ GROUP BY generation_metadata->>'model'
+→ JOIN with evaluations (PASS/FAIL)
+→ Result: "llama3 8B" has 97% pass rate vs "gpt-4o-mini" 92%
+```
+
+**4. Reproducibility**
+```
+Need to regenerate content with exact same settings:
+→ Read generation_metadata from original
+→ Use same model, prompt version, temperature
+→ Should produce similar (though not identical) output
+```
+
+### Exit Criteria
+
+- ✅ `generation_metadata` column added to `outputs` table
+- ✅ All new outputs store metadata
+- ✅ API exposes metadata on request
+- ✅ Dashboard can view metadata (optional)
+- ✅ Tested: Metadata populated correctly for all generation types
+
+---
+
+## 11.4 Implementation Timeline
+
+| Task | Effort | Priority | Phase |
+|------|--------|----------|-------|
+| **Kill Switch - Config Variables** | 30 min | 🔴 Critical | Pre-MVP |
+| **Kill Switch - API Endpoints** | 1 hour | 🔴 Critical | Pre-MVP |
+| **Kill Switch - Dashboard Indicator** | 30 min | 🟡 Medium | Pre-MVP |
+| **Generation Metadata - DB Schema** | 30 min | 🔴 Critical | Pre-MVP |
+| **Generation Metadata - Capture Logic** | 1 hour | 🔴 Critical | Pre-MVP |
+| **Generation Metadata - API Exposure** | 30 min | 🟡 Medium | Pre-MVP |
+| **Generation Metadata - Dashboard View** | 1 hour | 🟢 Low | MVP |
+| **Testing & Validation** | 1 hour | 🔴 Critical | Pre-MVP |
+| **Total** | **~6 hours** | | |
+
+**Recommendation:** Complete both features **before** starting MVP publishing work.
+
+---
+
+## 11.5 Success Criteria
+
+Before moving to MVP, verify:
+
+**Kill Switch:**
+- ✅ Can disable content generation via environment variable
+- ✅ Can disable publishing via environment variable
+- ✅ API endpoints return correct status
+- ✅ Dashboard shows kill switch status
+- ✅ Pipeline respects kill switch (stops gracefully)
+- ✅ Admin authentication works
+
+**Generation Metadata:**
+- ✅ All new outputs have `generation_metadata` populated
+- ✅ Metadata includes all required fields (model, prompt version, timestamp, etc.)
+- ✅ Metadata is immutable (stored at generation time, never modified)
+- ✅ API returns metadata when requested
+- ✅ Can query database by metadata fields
+
+**Integration:**
+- ✅ Both features tested in staging environment
+- ✅ No performance degradation
+- ✅ Documentation updated
+- ✅ Team trained on emergency procedures
+
+---
+
+# 12. Exit Criteria
+
+## 12.1 Pre-MVP Exit Conditions
 
 | # | Condition | Threshold | Status |
 |---|-----------|-----------|--------|
@@ -815,8 +1265,10 @@ GET /api/stats/hitl-progress
 | 2 | Rule Stability | No new rules for 7 days | PENDING |
 | 3 | False Positives | <10% | PENDING |
 | 4 | High-Risk Sources Validated | RBI, Bloomberg fully tested | PENDING |
+| 5 | **Kill Switch Operational** | **Config + API + Testing complete** | **PENDING** |
+| 6 | **Generation Metadata** | **All outputs store metadata** | **PENDING** |
 
-## 11.2 Agreement Rate Calculation
+## 12.2 Agreement Rate Calculation
 
 ```
 Agreement Rate = (PASS Count) / (PASS Count + FAIL Count) × 100
@@ -824,7 +1276,7 @@ Agreement Rate = (PASS Count) / (PASS Count + FAIL Count) × 100
 
 **Target:** ≥90%
 
-## 11.3 Post Pre-MVP State
+## 12.3 Post Pre-MVP State
 
 After exit criteria are met:
 
@@ -838,7 +1290,7 @@ After exit criteria are met:
 
 ---
 
-# 12. Appendices
+# 13. Appendices
 
 ## Appendix A: Event Types Reference
 

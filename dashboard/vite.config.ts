@@ -12,15 +12,17 @@ export default defineConfig({
     },
   },
   server: {
+    host: '127.0.0.1',  // Force IPv4
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8001',
+        target: 'http://127.0.0.1:8001',  // Use explicit IPv4
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:8001',
+        target: 'ws://127.0.0.1:8001',  // Use explicit IPv4
         ws: true,
+        timeout: 0,  // Disable timeout for WebSocket
       },
     },
   },

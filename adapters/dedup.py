@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set
 
@@ -101,6 +102,7 @@ class DeduplicationAdapter(BaseAdapter):
 
         Returns dict with event_id and similarity if duplicate found.
         """
+        start_time = time.time()
         service = self._get_embedding_service()
 
         for event in self._recent_events:
@@ -111,12 +113,16 @@ class DeduplicationAdapter(BaseAdapter):
             similarity = service.cosine_similarity(embedding, stored_embedding)
 
             if similarity >= SIMILARITY_THRESHOLD:
+                check_time = time.time() - start_time
+                print(f"    [Dedup] Semantic check completed in {check_time:.3f}s ({len(self._recent_events)} events checked)")
                 return {
                     "event_id": event["event_id"],
                     "similarity": similarity,
                     "title": event["title"]
                 }
 
+        check_time = time.time() - start_time
+        print(f"    [Dedup] Semantic check completed in {check_time:.3f}s (no match, {len(self._recent_events)} events checked)")
         return None
 
     def run(self, context: ExecutionContext) -> ExecutionContext:

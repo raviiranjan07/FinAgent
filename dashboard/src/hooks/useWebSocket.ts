@@ -16,159 +16,183 @@ interface UseWebSocketReturn {
 // Use relative URL to go through Vite proxy in dev
 const WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`
 const RECONNECT_DELAY = 3000
+const PING_INTERVAL = 25000  // 25 seconds (less than typical 30s timeout)
 
-export function useWebSocket(): UseWebSocketReturn {
-  const wsRef = useRef<WebSocket | null>(null)
-  const handlersRef = useRef<Set<MessageHandler>>(new Set())
-  const reconnectTimeoutRef = useRef<number | null>(null)
-  const [isConnected, setIsConnected] = useState(false)
-  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null)
+// ============================================================================
+// SINGLETON WebSocket Connection (shared across all components)
+// ============================================================================
+let sharedWs: WebSocket | null = null
+let sharedHandlers = new Set<MessageHandler>()
+let sharedConnectionListeners = new Set<(connected: boolean) => void>()
+let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+let pingInterval: ReturnType<typeof setInterval> | null = null
+let isConnecting = false
 
-  const connect = useCallback(() => {
-    // Don't reconnect if already connected
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      return
+function connectShared() {
+  // Prevent multiple simultaneous connection attempts
+  if (isConnecting || sharedWs?.readyState === WebSocket.OPEN) {
+    return
+  }
+
+  isConnecting = true
+
+  const ws = new WebSocket(WS_URL)
+
+  ws.onopen = () => {
+    console.log('[WebSocket] Connected (shared)')
+    isConnecting = false
+    sharedWs = ws
+
+    // Notify all listeners
+    sharedConnectionListeners.forEach(listener => listener(true))
+
+    // Clear reconnect timeout
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout)
+      reconnectTimeout = null
     }
 
-    const ws = new WebSocket(WS_URL)
-
-    ws.onopen = () => {
-      console.log('[WebSocket] Connected')
-      setIsConnected(true)
-
-      // Clear any pending reconnect timeout
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-        reconnectTimeoutRef.current = null
+    // Start ping interval
+    if (pingInterval) {
+      clearInterval(pingInterval)
+    }
+    pingInterval = setInterval(() => {
+      if (sharedWs?.readyState === WebSocket.OPEN) {
+        sharedWs.send('ping')
       }
+    }, PING_INTERVAL)
+  }
+
+  ws.onmessage = (event) => {
+    try {
+      const message: WebSocketMessage = JSON.parse(event.data)
+      console.log('[WebSocket] Message:', message)
+
+      // Notify all handlers
+      sharedHandlers.forEach(handler => {
+        try {
+          handler(message)
+        } catch (err) {
+          console.error('[WebSocket] Handler error:', err)
+        }
+      })
+    } catch {
+      // Non-JSON message (like pong) - ignore silently
+    }
+  }
+
+  ws.onclose = () => {
+    console.log('[WebSocket] Disconnected')
+    isConnecting = false
+    sharedWs = null
+
+    // Notify all listeners
+    sharedConnectionListeners.forEach(listener => listener(false))
+
+    // Clear ping interval
+    if (pingInterval) {
+      clearInterval(pingInterval)
+      pingInterval = null
     }
 
-    ws.onmessage = (event) => {
-      try {
-        const message: WebSocketMessage = JSON.parse(event.data)
-        console.log('[WebSocket] Message:', message)
-        setLastMessage(message)
-
-        // Notify all handlers
-        handlersRef.current.forEach(handler => {
-          try {
-            handler(message)
-          } catch (err) {
-            console.error('[WebSocket] Handler error:', err)
-          }
-        })
-      } catch {
-        // Non-JSON message (like pong)
-        console.log('[WebSocket] Text message:', event.data)
-      }
-    }
-
-    ws.onclose = () => {
-      console.log('[WebSocket] Disconnected')
-      setIsConnected(false)
-
-      // Auto-reconnect after delay
-      reconnectTimeoutRef.current = window.setTimeout(() => {
+    // Auto-reconnect
+    if (!reconnectTimeout) {
+      reconnectTimeout = setTimeout(() => {
+        reconnectTimeout = null
         console.log('[WebSocket] Reconnecting...')
-        connect()
+        connectShared()
       }, RECONNECT_DELAY)
     }
+  }
 
-    ws.onerror = (error) => {
-      console.error('[WebSocket] Error:', error)
+  ws.onerror = (error) => {
+    console.error('[WebSocket] Error:', error)
+    isConnecting = false
+  }
+}
+
+// Initialize connection on module load
+if (typeof window !== 'undefined') {
+  connectShared()
+}
+
+// ============================================================================
+// React Hook (uses shared connection)
+// ============================================================================
+export function useWebSocket(): UseWebSocketReturn {
+  const [isConnected, setIsConnected] = useState(sharedWs?.readyState === WebSocket.OPEN)
+  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null)
+  const localHandlersRef = useRef<Set<MessageHandler>>(new Set())
+
+  // Track connection state
+  useEffect(() => {
+    const connectionListener = (connected: boolean) => {
+      setIsConnected(connected)
     }
 
-    wsRef.current = ws
+    sharedConnectionListeners.add(connectionListener)
 
-    // Heartbeat / ping
-    const pingInterval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send('ping')
-      }
-    }, 30000)
+    // Set initial state
+    setIsConnected(sharedWs?.readyState === WebSocket.OPEN)
 
-    // Cleanup ping interval when ws closes
-    ws.addEventListener('close', () => {
-      clearInterval(pingInterval)
-    })
+    // Ensure connection exists
+    if (!sharedWs || sharedWs.readyState === WebSocket.CLOSED) {
+      connectShared()
+    }
+
+    return () => {
+      sharedConnectionListeners.delete(connectionListener)
+    }
   }, [])
 
-  // Connect on mount
+  // Handle messages for this hook instance
   useEffect(() => {
-    connect()
+    const messageHandler: MessageHandler = (message) => {
+      setLastMessage(message)
 
-    return () => {
-      // Cleanup on unmount
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-      }
-      if (wsRef.current) {
-        wsRef.current.close()
-      }
+      // Forward to local handlers
+      localHandlersRef.current.forEach(handler => {
+        try {
+          handler(message)
+        } catch (err) {
+          console.error('[WebSocket] Local handler error:', err)
+        }
+      })
     }
-  }, [connect])
 
-  // Subscribe to messages
-  const subscribe = useCallback((handler: MessageHandler): (() => void) => {
-    handlersRef.current.add(handler)
+    sharedHandlers.add(messageHandler)
+
     return () => {
-      handlersRef.current.delete(handler)
+      sharedHandlers.delete(messageHandler)
+    }
+  }, [])
+
+  // Subscribe to messages (local handlers)
+  const subscribe = useCallback((handler: MessageHandler): (() => void) => {
+    localHandlersRef.current.add(handler)
+
+    // Also add to shared handlers for immediate delivery
+    sharedHandlers.add(handler)
+
+    return () => {
+      localHandlersRef.current.delete(handler)
+      sharedHandlers.delete(handler)
     }
   }, [])
 
   return { isConnected, lastMessage, subscribe }
 }
 
-// Singleton instance for global WebSocket connection
-let globalWs: WebSocket | null = null
-let globalHandlers = new Set<MessageHandler>()
-let reconnectTimeout: number | null = null
-
-function connectGlobal() {
-  if (globalWs?.readyState === WebSocket.OPEN) {
-    return
-  }
-
-  const ws = new WebSocket(WS_URL)
-
-  ws.onopen = () => {
-    console.log('[WebSocket Global] Connected')
-    if (reconnectTimeout) {
-      clearTimeout(reconnectTimeout)
-      reconnectTimeout = null
-    }
-  }
-
-  ws.onmessage = (event) => {
-    try {
-      const message: WebSocketMessage = JSON.parse(event.data)
-      globalHandlers.forEach(handler => handler(message))
-    } catch {
-      // Non-JSON message
-    }
-  }
-
-  ws.onclose = () => {
-    console.log('[WebSocket Global] Disconnected, reconnecting...')
-    reconnectTimeout = window.setTimeout(connectGlobal, RECONNECT_DELAY)
-  }
-
-  globalWs = ws
-
-  // Ping every 30s
-  setInterval(() => {
-    if (globalWs?.readyState === WebSocket.OPEN) {
-      globalWs.send('ping')
-    }
-  }, 30000)
+// Export for direct subscription without hook
+export function subscribeToWebSocket(handler: MessageHandler): () => void {
+  sharedHandlers.add(handler)
+  return () => sharedHandlers.delete(handler)
 }
 
-// Global connection disabled - using hook-based connections instead
-// if (typeof window !== 'undefined') {
-//   connectGlobal()
-// }
-
-export function subscribeToWebSocket(handler: MessageHandler): () => void {
-  globalHandlers.add(handler)
-  return () => globalHandlers.delete(handler)
+// Export connection function for manual reconnect
+export function reconnectWebSocket() {
+  if (sharedWs) {
+    sharedWs.close()
+  }
+  connectShared()
 }

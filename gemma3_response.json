@@ -1,0 +1,28 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "When the Federal Reserve raises interest rates, it becomes more expensive for banks to borrow money. This increased cost is then passed on to consumers and businesses through higher loan rates for things like mortgages, car loans, and business investments, ultimately slowing down borrowing and spending in the economy. The goal is typically to curb inflation by reducing demand, but it can also potentially slow economic growth.\n\n\n\n"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 17,
+    "totalTokenCount": 17,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 17
+      }
+    ]
+  },
+  "modelVersion": "gemma-3-27b-it",
+  "responseId": "ta51adKzLO7jjuMPxZDHuAk"
+}

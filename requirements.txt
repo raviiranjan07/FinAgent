@@ -16,8 +16,15 @@ pgvector>=0.2.0
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 
-# Embeddings (optional - can use Ollama instead)
-# sentence-transformers>=2.2.0
+# Twitter API (MVP Phase 3)
+requests-oauthlib>=1.3.1
+
+# Worker & Scheduling (Automation Enhancements)
+APScheduler==3.10.4
+filelock==3.13.1
+
+# Embeddings (required for event and output deduplication)
+sentence-transformers>=2.2.0
 
 # Utilities
 numpy>=1.24.0

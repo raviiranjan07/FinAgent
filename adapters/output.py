@@ -1,11 +1,13 @@
 """OutputAdapter - Generates LLM explanation using frozen prompt."""
 
+import hashlib
 import time
-import requests
+from datetime import datetime
 from adapters.base import BaseAdapter
 from adapters.context import ExecutionContext
-from config.settings import OLLAMA_URL, MODEL_NAME, LLM_TIMEOUT, LLM_MAX_RETRIES, LLM_RETRY_DELAY, MAX_CONTENT_LENGTH
+from config.settings import MAX_CONTENT_LENGTH, PROMPT_VERSION
 from config.prompts import SYSTEM_PROMPT, INTENT_TASKS
+from services.llm_service import LLMService
 
 
 class OutputAdapter(BaseAdapter):
@@ -14,10 +16,19 @@ class OutputAdapter(BaseAdapter):
 
     As per documentation Section 4.5.3 OutputAdapter.
     Includes retry logic with exponential backoff for resilience.
+
+    Version History:
+    - v1.0.0: Initial implementation with frozen prompt
+    - v1.1.0: Added refusal detection and clarification retry
+    - v1.2.0: Added CRITICAL OUTPUT FORMAT (v1.6-notoken) to prevent
+              reasoning token output from qwen models (<think> tags)
+    - v1.3.0: Added output_embedding generation for similarity search
+    - v1.4.0: Moved <think> tag filtering to post-processing (from prompt)
+              to avoid suppressing output length
     """
 
     name = "output_adapter"
-    version = "1.1.0"
+    version = "1.4.0"
     input_keys = ["event", "event_type", "intent"]
     output_keys = ["llm_output"]
 
@@ -33,41 +44,60 @@ class OutputAdapter(BaseAdapter):
 
     # Clarification prompt to use when LLM refuses
     CLARIFICATION_PROMPT = """Note: This is a factual news summary task.
-You are NOT being asked to provide investment advice.
-Simply summarize what happened based on the title and content provided.
-If information is limited, state the facts available and note what is unclear."""
+        You are NOT being asked to provide investment advice.
+        Simply summarize what happened based on the title and content provided.
+        If information is limited, state the facts available and note what is unclear."""
+
+    def __init__(self):
+        """Initialize adapter with LLM service."""
+        super().__init__()
+        self.llm = LLMService()
 
     def _is_refusal(self, response: str) -> bool:
         """Check if LLM response is a refusal to provide content."""
         lower = response.lower()
         return any(pattern in lower for pattern in self.REFUSAL_PATTERNS)
 
-    def _call_llm_with_retry(self, payload: dict, event_id: str) -> str:
-        """Call LLM with retry logic and exponential backoff."""
-        last_error = None
+    def _clean_output(self, response: str) -> str:
+        """
+        Clean LLM output by removing reasoning tokens and metadata.
 
-        for attempt in range(LLM_MAX_RETRIES):
-            try:
-                response = requests.post(
-                    OLLAMA_URL,
-                    json=payload,
-                    timeout=LLM_TIMEOUT
-                )
-                response.raise_for_status()
-                return response.json()["response"]
+        This post-processing removes:
+        - <think> tags and their content
+        - Character count annotations
+        - Draft markers and meta-commentary
+        """
+        import re
 
-            except requests.exceptions.RequestException as e:
-                last_error = e
-                if attempt < LLM_MAX_RETRIES - 1:
-                    delay = LLM_RETRY_DELAY * (2 ** attempt)  # Exponential backoff
-                    print(f"    LLM attempt {attempt + 1} failed, retrying in {delay}s...")
-                    time.sleep(delay)
+        # Remove <think>...</think> tags and their content
+        cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL | re.IGNORECASE)
 
-        print(f"LLM generation failed for event {event_id} after {LLM_MAX_RETRIES} attempts: {last_error}")
-        return f"Error: Could not generate explanation after {LLM_MAX_RETRIES} attempts."
+        # Remove character count annotations like "(258 characters)" or "(safe under 270)"
+        cleaned = re.sub(r'\(\d+\s*characters?\)', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\(safe under \d+\)', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\(within limit\)', '', cleaned, flags=re.IGNORECASE)
+
+        # Remove draft markers like "Attempt 1:", "Final draft:", etc.
+        cleaned = re.sub(r'^(Attempt|Draft|Final|Revised)\s*\d*:?\s*', '', cleaned, flags=re.MULTILINE | re.IGNORECASE)
+
+        # Strip leading/trailing whitespace
+        cleaned = cleaned.strip()
+
+        return cleaned
+
+    def _call_llm_with_retry(self, prompt: str, event_id: str) -> str:
+        """Call LLM with retry logic (handled by LLMService)."""
+        try:
+            return self.llm.generate(prompt)
+        except Exception as e:
+            print(f"LLM generation failed for event {event_id}: {e}")
+            return f"Error: Could not generate explanation - {str(e)}"
 
     def run(self, context: ExecutionContext) -> ExecutionContext:
         """Generate explanation via LLM."""
+        # Start timing
+        start_time = time.time()
+
         # Get intent-specific task
         task = INTENT_TASKS.get(context.intent, INTENT_TASKS["DESCRIPTIVE"])
 
@@ -79,36 +109,76 @@ If information is limited, state the facts available and note what is unclear.""
 
         # Build prompt
         prompt = f"""SYSTEM:
-{SYSTEM_PROMPT}
+        {SYSTEM_PROMPT}
 
-EVENT TITLE:
-{context.event.title}
+        EVENT TITLE:
+        {context.event.title}
 
-EVENT CONTENT:
-{content}
+        EVENT CONTENT:
+        {content}
 
-TASK:
-{task}
-"""
-
-        payload = {
-            "model": MODEL_NAME,
-            "prompt": prompt,
-            "stream": False
-        }
+        TASK:
+        {task}
+        """
 
         # First attempt
-        llm_output = self._call_llm_with_retry(payload, context.event.event_id)
+        llm_output = self._call_llm_with_retry(prompt, context.event.event_id)
 
         # Check for refusal and retry with clarification if needed
         if self._is_refusal(llm_output):
             print(f"    LLM refused, retrying with clarification...")
             clarified_prompt = f"""{prompt}
 
-{self.CLARIFICATION_PROMPT}
-"""
-            payload["prompt"] = clarified_prompt
-            llm_output = self._call_llm_with_retry(payload, context.event.event_id)
+            {self.CLARIFICATION_PROMPT}
+            """
+            llm_output = self._call_llm_with_retry(clarified_prompt, context.event.event_id)
+
+        # Clean output - remove <think> tags and metadata (post-processing)
+        llm_output = self._clean_output(llm_output)
+
+        # Calculate generation duration
+        generation_duration_ms = int((time.time() - start_time) * 1000)
+
+        # Store model name for database column (top-level field for easy querying)
+        context.llm_model = self.llm.model_name
+
+        # Capture generation metadata for audit trail
+        context.generation_metadata = {
+            # Model information
+            "model": self.llm.model_name,
+            "provider": self.llm.mode,  # "ollama" or "api"
+
+            # Prompt configuration
+            "prompt_version": PROMPT_VERSION,
+            "system_prompt_hash": hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest(),
+
+            # Generation parameters (LLMService doesn't expose these, use defaults)
+            "temperature": 0.7,  # Default from LLM service
+            "max_tokens": 512,   # Default from LLM service
+
+            # Adapter versions (for reproducibility)
+            "adapter_versions": {
+                "output": self.version,
+            },
+
+            # Timing and context
+            "generated_at": datetime.utcnow().isoformat(),
+            "generation_duration_ms": generation_duration_ms,
+            "event_type": context.event_type,
+            "intent": context.intent,
+            "source": context.event.source,
+        }
 
         context.llm_output = llm_output
+
+        # Generate embedding for the output text (for similarity search/deduplication)
+        try:
+            from utils.embeddings import EmbeddingService
+            embedding_service = EmbeddingService()
+            context.output_embedding = embedding_service.encode(llm_output)  # Already returns list
+            print(f"    Generated output embedding ({len(context.output_embedding)}-dim)")
+        except Exception as e:
+            print(f"    [OUTPUT] Warning: Failed to generate output embedding: {e}")
+            context.output_embedding = None
+
         return context

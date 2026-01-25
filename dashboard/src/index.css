@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
@@ -25,45 +27,62 @@
   --success-foreground: 355.7 100% 97.3%;
   --warning: 47.9 95.8% 53.1%;
   --warning-foreground: 26 83.3% 14.1%;
+  color-scheme: light;
 }
 
 .dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
-  --primary: 210 40% 98%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 212.7 26.8% 83.9%;
-  --success: 142.1 70.6% 45.3%;
-  --success-foreground: 144.9 80.4% 10%;
-  --warning: 47.9 95.8% 53.1%;
-  --warning-foreground: 26 83.3% 14.1%;
+  --background: 0 0% 10%;
+  --foreground: 0 0% 98%;
+  --card: 0 0% 14%;
+  --card-foreground: 0 0% 98%;
+  --popover: 0 0% 14%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 0 0% 20%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0 0% 20%;
+  --muted-foreground: 0 0% 65%;
+  --accent: 217 91% 60%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 25%;
+  --input: 0 0% 25%;
+  --ring: 217 91% 60%;
+  --success: 142 76% 45%;
+  --success-foreground: 0 0% 98%;
+  --warning: 48 96% 53%;
+  --warning-foreground: 0 0% 10%;
+  color-scheme: dark;
 }
 
 * {
   border-color: hsl(var(--border));
 }
 
+html {
+  background-color: #ffffff;
+}
+
+html.dark {
+  background-color: #1a1a1a;
+}
+
 body {
   margin: 0;
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
+  background-color: #ffffff;
+  color: #1a1a1a;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+.dark body {
+  background-color: #1a1a1a;
+  color: #fafafa;
 }
 
 #root {
   min-height: 100vh;
+  background-color: transparent;
 }

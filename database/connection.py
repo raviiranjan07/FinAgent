@@ -78,6 +78,18 @@ def get_db_session() -> Generator[Session, None, None]:
         db.close()
 
 
+def get_db_connection():
+    """Get raw psycopg2 database connection for migrations.
+
+    Returns a raw connection object (not SQLAlchemy session).
+    Used by migration scripts that need cursor access.
+
+    Returns:
+        psycopg2 connection object
+    """
+    return engine.raw_connection()
+
+
 def check_db_connection() -> bool:
     """Check if database connection is working."""
     try:
