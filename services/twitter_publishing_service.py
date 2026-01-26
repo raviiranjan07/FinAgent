@@ -12,6 +12,42 @@ from sqlalchemy.orm import Session
 from database.models import ContentQueue
 from services.twitter_api_client import TwitterAPIClient, TwitterAPIError
 from config.settings import TWITTER_PUBLISHING_ENABLED
+from utils.timezone import get_ist_now
+
+
+def parse_single_content(content: str) -> str:
+    """Parse single tweet content from wrapped format.
+
+    Handles both wrapped format {"format":"SINGLE","content":{"tweet":"..."}}
+    and plain text.
+    """
+    try:
+        parsed = json.loads(content)
+        # Handle wrapped format
+        if isinstance(parsed, dict) and parsed.get("content", {}).get("tweet"):
+            return parsed["content"]["tweet"]
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return content
+
+
+def parse_thread_content(content: str) -> list:
+    """Parse thread content from wrapped format.
+
+    Handles both wrapped format {"format":"THREAD","content":{"tweets":[...]}}
+    and simple array format [...].
+    """
+    try:
+        parsed = json.loads(content)
+        # Handle wrapped format
+        if isinstance(parsed, dict) and parsed.get("content", {}).get("tweets"):
+            return parsed["content"]["tweets"]
+        # Handle simple array format (legacy)
+        if isinstance(parsed, list):
+            return parsed
+    except (json.JSONDecodeError, TypeError):
+        pass
+    raise ValueError("Invalid thread content format")
 
 
 class TwitterPublishingService:
@@ -91,7 +127,7 @@ class TwitterPublishingService:
             # Update database
             content.twitter_post_id = result["tweet_id"]
             content.status = "published"
-            content.published_at = datetime.utcnow()
+            content.published_at = get_ist_now()
             db.commit()
 
             print(f"\n[TwitterPublishing] ✅ Published successfully")
@@ -106,6 +142,35 @@ class TwitterPublishingService:
                 "twitter_url": f"https://twitter.com/i/web/status/{result['tweet_id']}"
             }
 
+        except TwitterAPIError as e:
+            print(f"\n[TwitterPublishing] ❌ Publishing failed: {e}\n")
+
+            # Update status to failed
+            content.status = "failed"
+
+            # Extract rate limit reset timestamp if present (429 error)
+            if e.retry_after:
+                # Convert Unix timestamp to IST datetime (naive, for database storage)
+                from datetime import datetime
+                from utils.timezone import IST
+                rate_limit_reset_dt = datetime.fromtimestamp(e.retry_after, tz=IST).replace(tzinfo=None)
+                content.rate_limit_reset = rate_limit_reset_dt
+                print(f"[TwitterPublishing] Rate limit reset: {rate_limit_reset_dt.isoformat()}")
+
+            # Extract orphaned tweet IDs if thread failed mid-posting
+            if e.orphaned_tweet_ids:
+                content.orphaned_tweet_ids = e.orphaned_tweet_ids
+                print(f"[TwitterPublishing] Orphaned tweets: {e.orphaned_tweet_ids}")
+                print(f"[TwitterPublishing] WARNING: {len(e.orphaned_tweet_ids)} tweet(s) posted but thread incomplete")
+
+            db.commit()
+
+            return {
+                "success": False,
+                "error": str(e),
+                "orphaned_tweet_ids": e.orphaned_tweet_ids
+            }
+
         except Exception as e:
             print(f"\n[TwitterPublishing] ❌ Publishing failed: {e}\n")
 
@@ -115,7 +180,8 @@ class TwitterPublishingService:
 
             return {
                 "success": False,
-                "error": str(e)
+                "error": str(e),
+                "orphaned_tweet_ids": []  # Non-TwitterAPIError exceptions have no orphaned tweets
             }
 
     def _publish_single(self, content: ContentQueue) -> Dict:
@@ -129,13 +195,23 @@ class TwitterPublishingService:
             Dict with tweet_id
         """
 
-        # Get tweet text (use edited if available, else original)
-        tweet_text = content.edited_content or content.content_text
+        # Get raw content (use edited if available, else original)
+        raw_content = content.edited_content or content.content_text
 
-        if not tweet_text:
+        # Debug: Show which content source is being used
+        if content.edited_content:
+            print(f"[TwitterPublishing] Using EDITED content ({len(content.edited_content)} chars)")
+        else:
+            print(f"[TwitterPublishing] Using ORIGINAL content ({len(content.content_text)} chars)")
+
+        if not raw_content:
             raise ValueError("No content text to publish")
 
+        # Parse wrapped format to get actual tweet text
+        tweet_text = parse_single_content(raw_content)
+
         print(f"[TwitterPublishing] Posting single tweet ({len(tweet_text)} chars)...")
+        print(f"[TwitterPublishing] Content preview: {tweet_text[:100]}...")
 
         # Post to Twitter
         result = self.client.post_tweet(tweet_text)
@@ -156,14 +232,15 @@ class TwitterPublishingService:
             Dict with thread_id and tweet_ids
         """
 
-        # Parse tweets from content_text (JSON array)
-        try:
-            tweets = json.loads(content.content_text)
-        except json.JSONDecodeError:
-            raise ValueError("Invalid thread content: not valid JSON")
+        # Use edited_content if available, else original content_text
+        # (Same logic as SINGLE format for consistency)
+        content_source = content.edited_content or content.content_text
 
-        if not isinstance(tweets, list):
-            raise ValueError("Invalid thread content: expected list of tweets")
+        if not content_source:
+            raise ValueError("No content text to publish")
+
+        # Parse wrapped format to get tweets array
+        tweets = parse_thread_content(content_source)
 
         if not tweets:
             raise ValueError("Thread has no tweets")
@@ -245,3 +322,57 @@ class TwitterPublishingService:
             return tweet is not None
         except TwitterAPIError:
             return False
+
+    def cleanup_orphaned_tweets(
+        self,
+        content_queue_id: str,
+        db: Session
+    ) -> Dict:
+        """
+        Delete orphaned tweets from a failed thread.
+
+        Args:
+            content_queue_id: UUID of content_queue item with orphaned tweets
+            db: Database session
+
+        Returns:
+            Dict with cleanup results: {
+                success: bool,
+                deleted_count: int,
+                failed_count: int,
+                errors: dict
+            }
+        """
+
+        content = db.query(ContentQueue).filter(
+            ContentQueue.id == content_queue_id
+        ).first()
+
+        if not content:
+            raise ValueError(f"Content not found: {content_queue_id}")
+
+        if not content.orphaned_tweet_ids:
+            return {
+                "success": True,
+                "deleted_count": 0,
+                "failed_count": 0,
+                "message": "No orphaned tweets to clean up"
+            }
+
+        print(f"[TwitterPublishing] Cleaning up {len(content.orphaned_tweet_ids)} orphaned tweet(s)...")
+
+        # Delete orphaned tweets via Twitter API
+        result = self.client.delete_orphaned_tweets(content.orphaned_tweet_ids)
+
+        # Update database
+        if result["deleted"]:
+            # Successfully deleted - clear orphaned_tweet_ids
+            content.orphaned_tweet_ids = None
+            db.commit()
+
+        return {
+            "success": len(result["failed"]) == 0,
+            "deleted_count": len(result["deleted"]),
+            "failed_count": len(result["failed"]),
+            "errors": result["errors"]
+        }

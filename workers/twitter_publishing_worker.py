@@ -35,6 +35,7 @@ from database.connection import get_db_session
 from database.models import ContentQueue
 from services.twitter_publishing_service import TwitterPublishingService
 from config.settings import TWITTER_PUBLISHING_ENABLED
+from utils.timezone import get_ist_now
 
 # Worker configuration
 WORKER_CHECK_INTERVAL = int(os.getenv("WORKER_CHECK_INTERVAL", 60))  # seconds
@@ -64,7 +65,7 @@ class TwitterPublishingWorker:
         """Update heartbeat file with current timestamp."""
         try:
             with open(WORKER_HEARTBEAT_FILE, 'w') as f:
-                f.write(f"{datetime.utcnow().isoformat()}\n")
+                f.write(f"{get_ist_now().isoformat()}\n")
                 f.write(f"success_count: {self.success_count}\n")
                 f.write(f"failure_count: {self.failure_count}\n")
                 if self.last_error:
@@ -86,7 +87,7 @@ class TwitterPublishingWorker:
         Returns:
             List of ContentQueue items ready to publish
         """
-        now = datetime.utcnow()
+        now = get_ist_now()
         publish_window = now + timedelta(minutes=1)
 
         items = db.query(ContentQueue).filter(
@@ -105,9 +106,11 @@ class TwitterPublishingWorker:
         Returns items where:
         - status = 'failed'
         - retry_count < max_retries
-        - exponential backoff time has elapsed
+        - rate limit reset time has passed (if rate limited)
+        - exponential backoff time has elapsed (for non-rate-limit errors)
 
-        Exponential backoff: 1s, 2s, 4s
+        Exponential backoff: 1s, 2s, 4s (only for transient errors)
+        Rate limit: Waits until rate_limit_reset timestamp
 
         Args:
             db: Database session
@@ -115,16 +118,38 @@ class TwitterPublishingWorker:
         Returns:
             List of ContentQueue items ready for retry
         """
-        now = datetime.utcnow()
+        now = get_ist_now()
         retry_items = []
 
-        # Get all failed items with retry_count < max
+        # Get all failed items
+        # CRITICAL: Include rate-limited items even if retry_count >= max
+        # Rate limits are temporary and shouldn't count against retry limit
         failed = db.query(ContentQueue).filter(
-            ContentQueue.status == 'failed',
-            ContentQueue.retry_count < WORKER_MAX_RETRIES
+            ContentQueue.status == 'failed'
         ).all()
 
         for item in failed:
+            # CRITICAL: Check rate limit reset first (takes priority over backoff)
+            if item.rate_limit_reset:
+                if now < item.rate_limit_reset:
+                    # Still rate limited - skip this item
+                    hours_remaining = (item.rate_limit_reset - now).total_seconds() / 3600
+                    print(f"[Worker] Skipping {str(item.id)[:8]}... - rate limited for {hours_remaining:.1f}h more")
+                    continue
+                else:
+                    # Rate limit expired - clear it and reset retry counter for fresh start
+                    print(f"[Worker] Rate limit expired for {str(item.id)[:8]}... - retrying")
+                    item.rate_limit_reset = None
+                    item.retry_count = 0  # Reset for fresh attempt
+                    db.commit()
+                    retry_items.append(item)
+                    continue
+
+            # Check if exceeded max retries (non-rate-limited items only)
+            if item.retry_count >= WORKER_MAX_RETRIES:
+                # Max retries exceeded - skip (will remain in failed state)
+                continue
+
             if item.last_publish_attempt is None:
                 # No attempt recorded, retry immediately
                 retry_items.append(item)
@@ -162,7 +187,7 @@ class TwitterPublishingWorker:
 
             # Update attempt counters BEFORE publishing
             item.publish_attempts = (item.publish_attempts or 0) + 1
-            item.last_publish_attempt = datetime.utcnow()
+            item.last_publish_attempt = get_ist_now()
             db.commit()
 
             # Publish
@@ -180,16 +205,27 @@ class TwitterPublishingWorker:
                 print(f"  ✅ Published: {result.get('tweet_id', 'N/A')}")
                 return True
             else:
-                # Failed - increment retry counter
-                item.retry_count = (item.retry_count or 0) + 1
-                item.error_message = result.get('error', 'Unknown error')
-                item.status = 'failed'
+                # Failed - check if rate limit error
+                is_rate_limit = 'Rate limit exceeded' in result.get('error', '')
+
+                if is_rate_limit:
+                    # Rate limit: Don't increment retry_count (temporary failure)
+                    # rate_limit_reset already set by publishing_service
+                    item.error_message = result.get('error', 'Unknown error')
+                    item.status = 'failed'
+                    print(f"  ⏱️ Rate limited (retry_count unchanged: {item.retry_count})")
+                else:
+                    # Real failure: Increment retry counter
+                    item.retry_count = (item.retry_count or 0) + 1
+                    item.error_message = result.get('error', 'Unknown error')
+                    item.status = 'failed'
+                    print(f"  ❌ Failed: {self.last_error}")
+                    print(f"     Retry {item.retry_count}/{WORKER_MAX_RETRIES}")
+
                 db.commit()
 
                 self.failure_count += 1
                 self.last_error = result.get('error', 'Unknown error')
-                print(f"  ❌ Failed: {self.last_error}")
-                print(f"     Retry {item.retry_count}/{WORKER_MAX_RETRIES}")
 
                 return False
 
@@ -225,13 +261,13 @@ class TwitterPublishingWorker:
                 all_items = scheduled_items + retry_items
 
                 if not all_items:
-                    now_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                    now_str = get_ist_now().strftime('%Y-%m-%d %H:%M:%S')
                     print(f"[Worker] No content ready to publish at {now_str}")
                     self.update_heartbeat()
                     return
 
                 print(f"\n{'='*70}")
-                print(f"[Worker] Processing batch at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"[Worker] Processing batch at {get_ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"  Scheduled: {len(scheduled_items)}")
                 print(f"  Retries: {len(retry_items)}")
                 print(f"  Total: {len(all_items)}")

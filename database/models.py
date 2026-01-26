@@ -11,6 +11,8 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, declarative_base
 from pgvector.sqlalchemy import Vector
 
+from utils.timezone import get_ist_now
+
 Base = declarative_base()
 
 
@@ -26,9 +28,9 @@ class Event(Base):
     link = Column(Text)
     source = Column(String(100), nullable=False)
     published_at = Column(DateTime)
-    fetched_at = Column(DateTime, default=datetime.utcnow)
+    fetched_at = Column(DateTime, default=get_ist_now)
     embedding = Column(Vector(384))  # all-minilm dimension
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
     # Relationships
     outputs = relationship("Output", back_populates="event", cascade="all, delete-orphan")
@@ -75,7 +77,7 @@ class Output(Base):
     output_embedding = Column(Vector(384))
     llm_model = Column(String(100))  # LLM model used (e.g., gemini-2.5-flash, qwen/qwen3-32b, llama3)
     generation_metadata = Column(JSONB, default=dict, nullable=False)  # Immutable snapshot of generation config
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
     # Relationships
     event = relationship("Event", back_populates="outputs")
@@ -121,7 +123,7 @@ class Evaluation(Base):
     failure_reason = Column(Text)
     comment = Column(Text)
     evaluator = Column(String(100))
-    evaluated_at = Column(DateTime, default=datetime.utcnow)
+    evaluated_at = Column(DateTime, default=get_ist_now)
 
     # Auto-approval tracking (added in migration 010)
     auto_approved = Column(Boolean, default=False)
@@ -197,11 +199,13 @@ class ContentQueue(Base):
     scheduled_for = Column(DateTime)  # When to publish (NULL = immediate)
     twitter_post_id = Column(String(100))  # Twitter post ID after publishing
     published_at = Column(DateTime)
+    orphaned_tweet_ids = Column(JSONB)  # Orphaned tweet IDs if thread fails mid-posting
 
     # Retry tracking (added in migration 011)
     publish_attempts = Column(Integer, default=0)  # Total attempts (never resets)
     retry_count = Column(Integer, default=0)  # Current retry cycle (resets on success, max 3)
     last_publish_attempt = Column(DateTime)  # For exponential backoff calculation
+    rate_limit_reset = Column(DateTime)  # Twitter rate limit reset time (if 429 error)
 
     # Generation tracking (for version control and debugging)
     plugin_version = Column(String(50))  # e.g., "twitter-v1.6-notoken"
@@ -211,8 +215,8 @@ class ContentQueue(Base):
     generation_context = Column(JSONB, default=dict)  # Full snapshot for debugging
 
     # Audit fields
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
+    updated_at = Column(DateTime, default=get_ist_now, onupdate=get_ist_now)
 
     # Relationships
     output = relationship("Output", back_populates="content_items")
@@ -251,9 +255,11 @@ class ContentQueue(Base):
             "scheduled_for": self.scheduled_for.isoformat() if self.scheduled_for else None,
             "twitter_post_id": self.twitter_post_id,
             "published_at": self.published_at.isoformat() if self.published_at else None,
+            "orphaned_tweet_ids": self.orphaned_tweet_ids,
             "publish_attempts": self.publish_attempts,
             "retry_count": self.retry_count,
             "last_publish_attempt": self.last_publish_attempt.isoformat() if self.last_publish_attempt else None,
+            "rate_limit_reset": self.rate_limit_reset.isoformat() if self.rate_limit_reset else None,
             "error_message": self.error_message,
             "plugin_version": self.plugin_version,
             "prompt_version": self.prompt_version,
@@ -286,8 +292,8 @@ class GeneratedContent(Base):
     format_style = Column(String(50))
 
     # Metadata
-    generated_at = Column(DateTime, default=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    generated_at = Column(DateTime, default=get_ist_now)
+    created_at = Column(DateTime, default=get_ist_now)
 
     # Relationships
     output = relationship("Output")
