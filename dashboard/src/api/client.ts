@@ -184,6 +184,8 @@ export interface DailyPublishingStat {
 export interface PublishingAnalytics {
   daily_stats: DailyPublishingStat[]
   total_published: number
+  live_count: number
+  dry_run_count: number
   by_format: {
     SINGLE?: number
     THREAD?: number

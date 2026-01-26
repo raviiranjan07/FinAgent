@@ -140,35 +140,6 @@ export default function ApprovedQueue() {
     }
   }
 
-  const handleApproveForGeneration = async (outputId: string, eventTitle: string) => {
-    try {
-      setProcessingIds(prev => new Set(prev).add(outputId))
-      const response = await fetch("/api/selection/approve-for-generation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ output_ids: [outputId] })
-      })
-
-      if (!response.ok) throw new Error("Failed to approve item for generation")
-
-      // Refresh the queue
-      await fetchApprovedQueue()
-
-      // Navigate to Generated Content screen after 1 second
-      setTimeout(() => {
-        navigate("/generated-content")
-      }, 1000)
-    } catch (err) {
-      alert(`❌ Error: ${err instanceof Error ? err.message : "Unknown error"}`)
-    } finally {
-      setProcessingIds(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(outputId)
-        return newSet
-      })
-    }
-  }
-
   const handleDeleteItem = async (outputId: string, eventTitle: string) => {
     if (!confirm(`Delete this item?\n\n"${eventTitle}"\n\nThis will permanently remove the output, evaluation, and any generated content.`)) {
       return

@@ -204,7 +204,7 @@ class TwitterPublishingWorker:
                 db.commit()
 
                 self.success_count += 1
-                print(f"  ✅ Published: {result.get('tweet_id', 'N/A')}")
+                print(f"  [OK] Published: {result.get('tweet_id', 'N/A')}")
                 return True
             else:
                 # Failed - check if rate limit error
@@ -215,13 +215,13 @@ class TwitterPublishingWorker:
                     # rate_limit_reset already set by publishing_service
                     item.error_message = result.get('error', 'Unknown error')
                     item.status = 'failed'
-                    print(f"  ⏱️ Rate limited (retry_count unchanged: {item.retry_count})")
+                    print(f"  [WAIT] Rate limited (retry_count unchanged: {item.retry_count})")
                 else:
                     # Real failure: Increment retry counter
                     item.retry_count = (item.retry_count or 0) + 1
                     item.error_message = result.get('error', 'Unknown error')
                     item.status = 'failed'
-                    print(f"  ❌ Failed: {self.last_error}")
+                    print(f"  [FAIL] Failed: {self.last_error}")
                     print(f"     Retry {item.retry_count}/{WORKER_MAX_RETRIES}")
 
                 db.commit()
@@ -240,7 +240,7 @@ class TwitterPublishingWorker:
 
             self.failure_count += 1
             self.last_error = str(e)
-            print(f"  ❌ Error: {e}")
+            print(f"  [FAIL] Error: {e}")
             print(f"     Retry {item.retry_count}/{WORKER_MAX_RETRIES}")
 
             import traceback
@@ -294,9 +294,9 @@ class TwitterPublishingWorker:
                 # Summary
                 print(f"\n{'='*70}")
                 print(f"[Worker] Batch complete:")
-                print(f"  ✅ Success: {batch_success}")
-                print(f"  ❌ Failed: {batch_fail}")
-                print(f"  📊 Session totals: {self.success_count} success, {self.failure_count} failures")
+                print(f"  [OK] Success: {batch_success}")
+                print(f"  [FAIL] Failed: {batch_fail}")
+                print(f"  [STATS] Session totals: {self.success_count} success, {self.failure_count} failures")
                 print(f"{'='*70}\n")
 
                 # Update heartbeat after successful batch
@@ -314,7 +314,7 @@ class TwitterPublishingWorker:
         """Run worker with APScheduler (production mode)."""
 
         print(f"\n{'='*70}")
-        print(f"🐦 TWITTER PUBLISHING WORKER STARTED (APScheduler)")
+        print(f"[TWITTER] TWITTER PUBLISHING WORKER STARTED (APScheduler)")
         print(f"{'='*70}")
         print(f"Check interval: {WORKER_CHECK_INTERVAL}s")
         print(f"Publishing enabled: {TWITTER_PUBLISHING_ENABLED}")
@@ -351,7 +351,7 @@ class TwitterPublishingWorker:
         """Run worker once (useful for testing or manual triggers)."""
 
         print(f"\n{'='*70}")
-        print(f"🐦 TWITTER PUBLISHING WORKER (Single Run)")
+        print(f"[TWITTER] TWITTER PUBLISHING WORKER (Single Run)")
         print(f"{'='*70}\n")
 
         self.process_batch()
@@ -398,7 +398,7 @@ def main():
                 worker.run_scheduled()
         except Timeout:
             print(f"\n{'='*70}")
-            print(f"❌ ERROR: Another worker instance is already running!")
+            print(f"[FAIL] ERROR: Another worker instance is already running!")
             print(f"Lock file: {WORKER_LOCK_FILE}")
             print(f"\nIf you're sure no other worker is running, delete the lock file:")
             print(f"  rm {WORKER_LOCK_FILE}")

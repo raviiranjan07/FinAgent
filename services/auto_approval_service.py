@@ -435,7 +435,7 @@ class AutoApprovalService:
             self.db.commit()
             self.db.refresh(evaluation)
 
-            logger.info(f"✓ Auto-approved output {output_id} - {decision.reason}")
+            logger.info(f"[OK] Auto-approved output {output_id} - {decision.reason}")
             return evaluation
 
         logger.info(f"⏸ Manual review required for output {output_id} - {decision.reason}")

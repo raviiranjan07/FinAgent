@@ -100,7 +100,7 @@ Please generate a corrected version that fixes these issues while maintaining th
                 if is_valid:
                     # Success!
                     if attempt > 0:
-                        print(f"    ✓ Validation passed on retry {attempt + 1}")
+                        print(f"    [OK] Validation passed on retry {attempt + 1}")
                     break
                 else:
                     # Check if only issue is character count and it's close to limit
@@ -109,16 +109,16 @@ Please generate a corrected version that fixes these issues while maintaining th
 
                     # If within 10% of limit (280-308 chars) and only char count issue, try smart truncation
                     if char_count_only and 280 < current_length <= 308 and attempt == max_retries - 1:
-                        print(f"    ⚠️ Close to limit ({current_length} chars) - attempting smart truncation")
+                        print(f"    [WARN] Close to limit ({current_length} chars) - attempting smart truncation")
                         twitter_text = self._smart_truncate(twitter_text, max_length=280)
 
                         # Re-validate after truncation
                         is_valid, errors = self.validate_twitter_format(twitter_text)
                         if is_valid:
-                            print(f"    ✓ Smart truncation successful ({len(twitter_text)} chars)")
+                            print(f"    [OK] Smart truncation successful ({len(twitter_text)} chars)")
                             break
                         else:
-                            print(f"    ✗ Truncation failed validation: {', '.join(errors)}")
+                            print(f"    [FAIL] Truncation failed validation: {', '.join(errors)}")
 
                     # Validation failed
                     error_msg = f"Generated Twitter content failed validation: {', '.join(errors)}"
@@ -154,7 +154,7 @@ Please generate a corrected version that fixes these issues while maintaining th
         db.add(generated)
         db.flush()
 
-        print(f"    ✅ Twitter content generated: {len(twitter_text)} chars, {len(hashtags)} hashtags")
+        print(f"    [OK] Twitter content generated: {len(twitter_text)} chars, {len(hashtags)} hashtags")
         return generated
 
     def validate_twitter_format(self, content: str) -> Tuple[bool, List[str]]:

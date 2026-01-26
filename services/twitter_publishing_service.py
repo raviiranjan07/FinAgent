@@ -130,7 +130,7 @@ class TwitterPublishingService:
             content.published_at = get_ist_now()
             db.commit()
 
-            print(f"\n[TwitterPublishing] ✅ Published successfully")
+            print(f"\n[TwitterPublishing] [OK] Published successfully")
             print(f"  Tweet ID: {result['tweet_id']}")
             print(f"  URL: https://twitter.com/i/web/status/{result['tweet_id']}\n")
 
@@ -143,7 +143,7 @@ class TwitterPublishingService:
             }
 
         except TwitterAPIError as e:
-            print(f"\n[TwitterPublishing] ❌ Publishing failed: {e}\n")
+            print(f"\n[TwitterPublishing] [FAIL] Publishing failed: {e}\n")
 
             # Update status to failed
             content.status = "failed"
@@ -172,7 +172,7 @@ class TwitterPublishingService:
             }
 
         except Exception as e:
-            print(f"\n[TwitterPublishing] ❌ Publishing failed: {e}\n")
+            print(f"\n[TwitterPublishing] [FAIL] Publishing failed: {e}\n")
 
             # Update status to failed
             content.status = "failed"

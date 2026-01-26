@@ -1,7 +1,7 @@
 """
 Data retention service for cleaning up old data.
 
-⚠️ IMPORTANT: DO NOT USE THIS DURING PRE-MVP/MVP PHASE (First 6 months)
+[WARN] IMPORTANT: DO NOT USE THIS DURING PRE-MVP/MVP PHASE (First 6 months)
 
 During MVP, we need ALL historical data for:
 - Analytics (30/90 day trends)
@@ -169,6 +169,6 @@ if __name__ == "__main__":
     if response == 'yes':
         print("\nRunning actual cleanup...")
         stats = run_cleanup(retention_days=10, dry_run=False)
-        print(f"\n✅ {stats['message']}")
+        print(f"\n[OK] {stats['message']}")
     else:
-        print("\n❌ Cleanup cancelled")
+        print("\n[FAIL] Cleanup cancelled")

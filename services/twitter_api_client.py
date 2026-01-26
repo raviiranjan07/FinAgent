@@ -111,7 +111,7 @@ class TwitterAPIClient:
                 tweet_id = data["data"]["id"]
                 tweet_text = data["data"]["text"]
 
-                print(f"[TwitterAPI] ✅ Tweet posted: {tweet_id}")
+                print(f"[TwitterAPI] [OK] Tweet posted: {tweet_id}")
 
                 return {
                     "id": tweet_id,
@@ -195,7 +195,7 @@ class TwitterAPIClient:
 
             thread_id = tweet_ids[0]
 
-            print(f"[TwitterAPI] ✅ Thread posted: {thread_id} ({len(tweet_ids)} tweets)")
+            print(f"[TwitterAPI] [OK] Thread posted: {thread_id} ({len(tweet_ids)} tweets)")
 
             return {
                 "thread_id": thread_id,
@@ -208,7 +208,7 @@ class TwitterAPIClient:
         except TwitterAPIError as e:
             # If thread posting fails partway, we've already posted some tweets
             # Attach orphaned tweet IDs to the error for tracking/cleanup
-            print(f"[TwitterAPI] ❌ Thread posting failed at tweet {len(tweet_ids)+1}")
+            print(f"[TwitterAPI] [FAIL] Thread posting failed at tweet {len(tweet_ids)+1}")
             print(f"[TwitterAPI] Orphaned tweets: {tweet_ids}")
 
             # Re-raise with orphaned tweet IDs attached
@@ -217,7 +217,7 @@ class TwitterAPIClient:
 
         except Exception as e:
             # Non-TwitterAPI exception (network error, validation, etc.)
-            print(f"[TwitterAPI] ❌ Thread posting failed at tweet {len(tweet_ids)+1}")
+            print(f"[TwitterAPI] [FAIL] Thread posting failed at tweet {len(tweet_ids)+1}")
             print(f"[TwitterAPI] Orphaned tweets: {tweet_ids}")
 
             # Wrap in TwitterAPIError with orphaned tweet IDs
@@ -280,14 +280,14 @@ class TwitterAPIClient:
             if response.status_code == 200:
                 data = response.json()
                 username = data["data"]["username"]
-                print(f"[TwitterAPI] ✅ Credentials valid (authenticated as @{username})")
+                print(f"[TwitterAPI] [OK] Credentials valid (authenticated as @{username})")
                 return True
             else:
-                print(f"[TwitterAPI] ❌ Credential verification failed: {response.status_code}")
+                print(f"[TwitterAPI] [FAIL] Credential verification failed: {response.status_code}")
                 return False
 
         except Exception as e:
-            print(f"[TwitterAPI] ❌ Credential verification error: {e}")
+            print(f"[TwitterAPI] [FAIL] Credential verification error: {e}")
             return False
 
     def delete_orphaned_tweets(self, tweet_ids: List[str]) -> Dict:
@@ -326,16 +326,16 @@ class TwitterAPIClient:
                 response = self.session.delete(url, timeout=30)
 
                 if response.status_code == 200:
-                    print(f"[TwitterAPI] ✅ Deleted tweet: {tweet_id}")
+                    print(f"[TwitterAPI] [OK] Deleted tweet: {tweet_id}")
                     deleted.append(tweet_id)
                 else:
                     error_msg = f"HTTP {response.status_code}"
-                    print(f"[TwitterAPI] ❌ Failed to delete tweet {tweet_id}: {error_msg}")
+                    print(f"[TwitterAPI] [FAIL] Failed to delete tweet {tweet_id}: {error_msg}")
                     failed.append(tweet_id)
                     errors[tweet_id] = error_msg
 
             except Exception as e:
-                print(f"[TwitterAPI] ❌ Error deleting tweet {tweet_id}: {e}")
+                print(f"[TwitterAPI] [FAIL] Error deleting tweet {tweet_id}: {e}")
                 failed.append(tweet_id)
                 errors[tweet_id] = str(e)
 

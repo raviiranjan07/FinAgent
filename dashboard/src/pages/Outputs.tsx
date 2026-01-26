@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
-import { outputsApi, evaluationsApi, twitterApi, autoApprovalApi } from "@/api/client"
-import type { Output } from "@/api/client"
+import { outputsApi, evaluationsApi, twitterApi } from "@/api/client"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -22,7 +21,6 @@ import {
   Bot,
   Info,
   Loader2,
-  Check,
   ArrowRight,
 } from "lucide-react"
 
@@ -90,23 +88,6 @@ export function Outputs() {
       })
       if (!response.ok) {
         throw new Error("Failed to delete output")
-      }
-      return response.json()
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["outputs"] })
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
-      setSelectedOutputId(null)
-    },
-  })
-
-  const deleteAllOutputs = useMutation({
-    mutationFn: async () => {
-      const response = await fetch(`/api/selection/delete-all-outputs`, {
-        method: "DELETE",
-      })
-      if (!response.ok) {
-        throw new Error("Failed to delete all outputs")
       }
       return response.json()
     },
@@ -194,29 +175,6 @@ export function Outputs() {
         setGeneratingTwitter(false)
       },
     })
-  }
-
-  const handleDeleteAll = () => {
-    const totalOutputs = data?.total || 0
-
-    if (totalOutputs === 0) {
-      alert("No outputs to delete")
-      return
-    }
-
-    const confirmDelete = confirm(
-      `⚠️ WARNING: You are about to delete ALL ${totalOutputs} outputs from the database!\n\nThis will permanently remove:\n- All outputs\n- All evaluations\n- All content queue entries\n- All generated content\n\nThis action CANNOT be undone!\n\nType 'DELETE ALL' in the next prompt to confirm.`
-    )
-
-    if (!confirmDelete) return
-
-    const confirmation = prompt("Type 'DELETE ALL' to confirm:")
-
-    if (confirmation === "DELETE ALL") {
-      deleteAllOutputs.mutate()
-    } else {
-      alert("Deletion cancelled. Confirmation text did not match.")
-    }
   }
 
   const toggleSelection = (outputId: string, e: React.MouseEvent) => {

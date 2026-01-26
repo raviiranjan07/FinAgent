@@ -162,7 +162,7 @@ export function Events() {
               size="sm"
               onClick={() => setSelectedSource(source)}
             >
-              {source} ({count})
+              {source} ({count as number})
             </Button>
           ))}
         </div>
