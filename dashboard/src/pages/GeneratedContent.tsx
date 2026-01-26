@@ -411,9 +411,9 @@ export function GeneratedContent() {
   const handleSchedule = () => {
     if (!selectedContent || !scheduledDateTime) return
 
-    // Convert datetime-local value to ISO string for API
-    const localDate = new Date(scheduledDateTime)
-    const isoString = localDate.toISOString()
+    // datetime-local gives us "YYYY-MM-DDTHH:mm" in local time
+    // Append IST timezone offset for API (backend expects IST)
+    const isoString = scheduledDateTime + ":00+05:30"
 
     // Use reschedule if already scheduled, otherwise schedule
     if (selectedContent.status === "scheduled") {
@@ -432,9 +432,12 @@ export function GeneratedContent() {
   const handleReschedule = (item: TwitterContentItem) => {
     setSelectedContent(item)
     setScheduleModalOpen(true)
-    // Pre-fill with existing scheduled time
+    // Pre-fill with existing scheduled time (already in IST from backend)
     if (item.status === "scheduled" && item.scheduled_for) {
-      setScheduledDateTime(new Date(item.scheduled_for).toISOString().slice(0, 16))
+      // Backend sends IST time like "2026-01-26T15:00:00+05:30"
+      // Extract just the date and time part for datetime-local input
+      const istTime = item.scheduled_for.slice(0, 16)  // "YYYY-MM-DDTHH:mm"
+      setScheduledDateTime(istTime)
     }
   }
 
