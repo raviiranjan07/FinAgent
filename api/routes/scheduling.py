@@ -11,6 +11,7 @@ from database.connection import get_db_session
 from database.models import ContentQueue, GeneratedContent
 from services.smart_scheduler import SmartScheduler
 from api.websocket import manager
+from utils.timezone import get_ist_now
 
 router = APIRouter()
 
@@ -21,10 +22,10 @@ UTC = ZoneInfo("UTC")
 
 def to_ist_isoformat(dt: Optional[datetime]) -> Optional[str]:
     """
-    Convert database datetime (UTC, timezone-naive) to IST ISO format string.
+    Format database datetime (naive IST) to IST ISO format string.
 
     Args:
-        dt: Datetime from database (UTC, timezone-naive)
+        dt: Datetime from database (naive IST timestamp)
 
     Returns:
         ISO format string with IST timezone (e.g., "2026-01-25T15:28:34+05:30")
@@ -33,12 +34,12 @@ def to_ist_isoformat(dt: Optional[datetime]) -> Optional[str]:
     if dt is None:
         return None
 
-    # Database stores timezone-naive UTC - make it timezone-aware and convert to IST
+    # Database stores naive IST timestamps - just add IST timezone info for display
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
+        dt = dt.replace(tzinfo=IST)
 
-    # Convert to IST and return ISO format (includes +05:30 suffix)
-    return dt.astimezone(IST).isoformat()
+    # Return ISO format (includes +05:30 suffix)
+    return dt.isoformat()
 
 
 # Request/Response Models
@@ -143,11 +144,11 @@ async def schedule_items_smart(request: ScheduleItemsRequest):
                 queue_id = UUID(item["content_queue_id"])
                 queue_item = db.query(ContentQueue).filter(ContentQueue.id == queue_id).first()
 
-                # Convert IST datetime to UTC before saving (database stores UTC)
+                # Store as naive IST (strip timezone info - database stores naive IST)
                 scheduled_time_ist = item["scheduled_for"]
-                scheduled_time_utc = scheduled_time_ist.astimezone(UTC).replace(tzinfo=None)
+                scheduled_time_naive = scheduled_time_ist.replace(tzinfo=None)
 
-                queue_item.scheduled_for = scheduled_time_utc
+                queue_item.scheduled_for = scheduled_time_naive
                 queue_item.status = "scheduled"
                 db.commit()
 
@@ -205,18 +206,18 @@ async def schedule_item_manual(request: ScheduleSingleRequest):
                     f"Item cannot be scheduled (status: {queue_item.status})"
                 )
 
-            # Parse scheduled time
+            # Parse scheduled time (user sends IST datetime)
             scheduled_for = datetime.fromisoformat(request.scheduled_for)
 
             # Validate not in the past
             if scheduled_for < datetime.now(IST):
                 raise HTTPException(400, "Cannot schedule in the past")
 
-            # Convert to UTC before saving (database stores UTC without timezone)
-            scheduled_for_utc = scheduled_for.astimezone(UTC).replace(tzinfo=None)
+            # Store as naive IST (strip timezone info - database stores naive IST)
+            scheduled_for_naive = scheduled_for.replace(tzinfo=None)
 
             # Update database
-            queue_item.scheduled_for = scheduled_for_utc
+            queue_item.scheduled_for = scheduled_for_naive
             queue_item.status = "scheduled"
             db.commit()
 
@@ -258,19 +259,19 @@ async def reschedule_item(content_queue_id: str, request: RescheduleRequest):
             if queue_item.status != "scheduled":
                 raise HTTPException(400, f"Item is not scheduled (status: {queue_item.status})")
 
-            # Parse new time
+            # Parse new time (user sends IST datetime)
             new_time = datetime.fromisoformat(request.new_time)
 
             # Validate not in the past
             if new_time < datetime.now(IST):
                 raise HTTPException(400, "Cannot reschedule to the past")
 
-            # Convert to UTC before saving (database stores UTC without timezone)
-            new_time_utc = new_time.astimezone(UTC).replace(tzinfo=None)
+            # Store as naive IST (strip timezone info - database stores naive IST)
+            new_time_naive = new_time.replace(tzinfo=None)
 
             # Update
             old_time = queue_item.scheduled_for
-            queue_item.scheduled_for = new_time_utc
+            queue_item.scheduled_for = new_time_naive
             db.commit()
 
             # Notify via WebSocket
@@ -520,6 +521,76 @@ async def publish_now(content_queue_id: str):
             raise HTTPException(500, f"Failed to publish: {str(e)}")
 
 
+@router.post("/reset-for-republish/{content_queue_id}")
+async def reset_for_republish(content_queue_id: str):
+    """
+    Reset a published item so it can be republished.
+
+    This endpoint:
+    - Clears twitter_post_id and published_at
+    - Sets status back to 'ready_to_schedule'
+    - Allows republishing content that was already posted
+
+    Use this when:
+    - The original tweet was deleted from Twitter
+    - You want to post the same content again
+    - There was an issue with the original publish
+
+    Args:
+        content_queue_id: UUID of content queue item
+
+    Returns:
+        Success message
+    """
+    with get_db_session() as db:
+        try:
+            queue_id = UUID(content_queue_id)
+            queue_item = db.query(ContentQueue).filter(ContentQueue.id == queue_id).first()
+
+            if not queue_item:
+                raise HTTPException(404, "Content queue item not found")
+
+            if queue_item.status != "published":
+                raise HTTPException(
+                    400,
+                    f"Item is not published (status: {queue_item.status}). Only published items can be reset for republishing."
+                )
+
+            # Store old values for response
+            old_tweet_id = queue_item.twitter_post_id
+            old_published_at = queue_item.published_at
+
+            # Reset for republishing
+            queue_item.twitter_post_id = None
+            queue_item.published_at = None
+            queue_item.status = "ready_to_schedule"
+            queue_item.updated_at = get_ist_now()
+            db.commit()
+
+            # Notify via WebSocket
+            await manager.broadcast({
+                "type": "PUBLISH_UPDATE",
+                "data": {
+                    "action": "reset_for_republish",
+                    "content_queue_id": content_queue_id
+                }
+            })
+
+            return {
+                "success": True,
+                "message": "Content reset for republishing. You can now schedule or publish it again.",
+                "content_queue_id": content_queue_id,
+                "previous_tweet_id": old_tweet_id,
+                "previous_published_at": to_ist_isoformat(old_published_at) if old_published_at else None,
+                "new_status": "ready_to_schedule"
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(500, f"Failed to reset for republishing: {str(e)}")
+
+
 @router.get("/health")
 async def get_worker_health():
     """
@@ -570,7 +641,7 @@ async def get_worker_health():
                 heartbeat_data[key.strip()] = value.strip()
 
         # Determine if worker is alive (heartbeat within last 2 minutes)
-        now = datetime.utcnow()
+        now = get_ist_now()
         time_since_heartbeat = now - last_heartbeat
         is_alive = time_since_heartbeat < timedelta(minutes=2)
 

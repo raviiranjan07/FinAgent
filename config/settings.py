@@ -9,8 +9,6 @@ RSS_SOURCES = {
     "FED_ALL": "https://www.federalreserve.gov/feeds/press_all.xml",
     "FED_MONETARY": "https://www.federalreserve.gov/feeds/press_monetary.xml",
     "ECB_PRESS": "https://www.ecb.europa.eu/rss/press.html",
-    "BOE_NEWS": "https://www.bankofengland.co.uk/rss/news",
-    "BOJ_NEWS": "https://www.boj.or.jp/en/rss/whatsnew.xml",
 
     # OFFICIAL - Regulators
     "SEBI": "https://www.sebi.gov.in/sebirss.xml",
@@ -28,7 +26,7 @@ RSS_SOURCES = {
     # NEWS - US
     "CNBC_TOP": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
     "CNBC_WORLD": "https://www.cnbc.com/id/100727362/device/rss/rss.html",
-    "MARKETWATCH": "https://feeds.marketwatch.com/marketwatch/topstories",
+    "MARKETWATCH": "https://feeds.marketwatch.com/marketwatch/marketpulse",  # Real-time market news (not Q&A advice columns)
     "YAHOO_FINANCE": "https://finance.yahoo.com/news/rssindex",
 
     # SPECIALTY - Crypto
@@ -51,7 +49,7 @@ SOURCE_CATEGORIES = {
     "CENTRAL_BANKS": {
         "type": "OFFICIAL",
         "priority": 1,
-        "quota": 5,
+        "quota": 8,  # 4 sources × 2 per source
         "region": "GLOBAL",
         "enabled": True,
         "sources": [
@@ -59,14 +57,12 @@ SOURCE_CATEGORIES = {
             "FED_ALL",
             "FED_MONETARY",
             "ECB_PRESS",
-            "BOE_NEWS",
-            "BOJ_NEWS",
         ],
     },
     "REGULATORS": {
         "type": "OFFICIAL",
         "priority": 1,
-        "quota": 2,
+        "quota": 1,  # 1 source × 1
         "region": "INDIA",
         "enabled": True,
         "sources": [
@@ -80,7 +76,7 @@ SOURCE_CATEGORIES = {
     "GLOBAL_NEWS": {
         "type": "NEWS",
         "priority": 2,
-        "quota": 5,
+        "quota": 4,  # 2 sources × 2 per source
         "region": "GLOBAL",
         "enabled": True,
         "sources": [
@@ -91,7 +87,7 @@ SOURCE_CATEGORIES = {
     "INDIA_NEWS": {
         "type": "NEWS",
         "priority": 2,
-        "quota": 4,
+        "quota": 8,  # 4 sources × 2 per source
         "region": "INDIA",
         "enabled": True,
         "sources": [
@@ -103,8 +99,8 @@ SOURCE_CATEGORIES = {
     },
     "US_NEWS": {
         "type": "NEWS",
-        "priority": 3,
-        "quota": 2,
+        "priority": 4,
+        "quota": 8,  # 4 sources × 2 per source
         "region": "USA",
         "enabled": True,
         "sources": [
@@ -120,8 +116,8 @@ SOURCE_CATEGORIES = {
     # -------------------------------------------------------------------------
     "CRYPTO": {
         "type": "SPECIALTY",
-        "priority": 4,
-        "quota": 2,
+        "priority": 3,
+        "quota": 8,  # 4 sources × 2 per source
         "region": "GLOBAL",
         "enabled": True,
         "sources": [
@@ -265,7 +261,7 @@ CONTENT_GENERATION_ENABLED = os.getenv("CONTENT_GENERATION_ENABLED", "true").low
 
 # Prompt Versioning: Track prompt versions for audit trail
 PROMPT_VERSION = "1.0"
-TWITTER_PROMPT_VERSION = "1.7-rpm"  # RPM optimization: soft tension, smart hashtags, engagement focus
+TWITTER_PROMPT_VERSION = "3.0-adaptive"  # Content-type adaptive: Breaking News (event-first) + Educational (concept-first) + High-RPM (question/challenge)
 
 # Note: These can be toggled via environment variables or API endpoints
 # CONTENT_GENERATION_ENABLED: Set to "false" to stop pipeline content generation

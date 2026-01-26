@@ -65,6 +65,64 @@ Twitter Prompts:
   - Updated emoji guidance: use 1 subtle emoji when it improves scannability, skip if unnecessary
   - Smart hashtags: LLM decides based on discovery value, skip if generic or obvious
   - Key principle: Optimize for dwell time and replies, not just clarity
+- v2.0-educator: COMPLETE REDESIGN - Shift from analyst to educator voice (Pre-MVP Phase 4)
+  - TOTAL REWRITE: Changed from "market commentator" to "finance educator" persona
+  - NEW NICHE: "Contextual Finance Education Through News Analysis"
+  - 5 Core Pillars: (1) Explain financial terms, (2) Policy/strategy explanation,
+    (3) Historical comparison, (4) Current context, (5) Impact analysis
+  - MANDATORY: Explain every financial term used in simple language (8th grade level)
+  - MANDATORY: Use analogies to connect concepts to everyday life
+  - REQUIRED: Provide historical context when relevant (when rules changed, why)
+  - Removed all MODE rules (FACT/CONTEXT/SCRUTINY) - simplified to educational approach
+  - Removed skepticism/questioning focus - replaced with teaching focus
+  - Added 3 GOOD examples showing educational style with term definitions and analogies
+  - Added 2 BAD examples showing what NOT to do (analyst voice, abstract language)
+  - Hashtags now BANNED (except entity names not in text)
+  - Target audience: Non-experts who want to understand finance
+  - Key principle: Teach concepts through current events, make finance accessible
+- v2.1-compact: SIMPLIFIED for 280 char limit (Bug fix release)
+  - CRITICAL FIX: Removed hashtag validation requirement (was contradicting "hashtags banned")
+  - Drastically simplified prompt to prioritize brevity over completeness
+  - Reduced from 4 mandatory requirements to 3 priority-ordered suggestions
+  - Made analogies/context optional ("only if space permits")
+  - Emphasized 240-260 char target at TOP of prompt
+  - Format: 1-2 paragraphs max (was 2-3), 1 sentence each
+  - Reduced examples from 3 to 2 (most concise ones)
+  - Added BAD example showing 300+ char verbosity
+  - Key change: "Brevity over completeness" - sacrifice education for fitting in limit
+- v2.2-event-first: EVENT-DRIVEN architecture (strategy shift)
+  - PARADIGM SHIFT: Changed from "educator teaching through news" to "news decoder adding minimal context"
+  - Role flip: "You explain financial NEWS to non-experts" (event = product, education = support)
+  - Priority reorder: 1. Event (mandatory), 2. Why it matters (impact), 3. Define ONE term only if blocking understanding
+  - Added anti-education guardrails: "Never explain more than ONE term", "If event is understandable without defining concept, DON'T"
+  - Updated examples to show event-first approach (event + impact, minimal/no education)
+  - Added BAD example showing education-first approach
+  - Key principle: "News decoded, not lessons taught" - event velocity over deep education
+- v2.3-event-specific: EVENT SPECIFICITY enforcement (critical fix)
+  - CRITICAL FIX: Added concrete event trigger requirements (launch, filing, approval, rejection, warning, vote, rate change, policy move)
+  - Added "WHO did WHAT" specificity requirement (not "New ETFs offer..." but "Fidelity launched ETFs that...")
+  - Added "could this run any day" check - if yes, rewrite with actual event
+  - Made impact tied to THIS event change, not generic benefits/risks
+  - Added jargon acceptance clause: "Jargon is acceptable if commonly used in finance news"
+  - Added BAD example: "New crypto ETFs offer staking rewards" - lacks WHO/WHEN/event specificity
+  - Key insight: Problem is not jargon, it's timeless phrasing - event must be anchored to concrete trigger
+- v2.3.1-contextual-emojis: VISUAL ENHANCEMENT (emoji policy clarification)
+  - SINGLE tweets: Allow optional contextual emojis (📊 data, 📉 markets, 💰 money, ⚖️ policy) - use sparingly
+  - THREAD tweets: Require 🧵 emoji in tweet 1 (signals thread) + optional contextual emojis throughout
+  - Rationale: Emojis as visual cues enhance clarity without compromising event-first approach
+  - Hashtags remain banned (no change)
+- v3.0-adaptive: CONTENT-TYPE BASED APPROACH (paradigm shift)
+  - MAJOR CHANGE: Abandoned one-size-fits-all "event-first" mandate
+  - Philosophy shift: "Information provider and educator" not "news channel"
+  - Introduced 3 distinct content strategies:
+    1. BREAKING NEWS (Event-First): Policy changes, rate decisions → WHO/WHAT/WHEN + impact
+    2. EDUCATIONAL (Concept-First with News Hook): Product launches, mechanisms → News hook + HOW it works + WHY it matters
+    3. HIGH-RPM ENGAGEMENT (Question & Challenge): Vague narratives → Challenge assumptions + data questions
+  - Removed explainer article detection from EventTypeAdapter v1.6.0 (educational content now allowed)
+  - Kept Q&A personal advice detection (still skip those)
+  - Adaptive approach: Let content type determine style, not force all into event-first mold
+  - Key insight: ICICI thread is good educational content, not a failure of event-specificity
+  - Rationale: Different content types serve different purposes - breaking news needs speed, educational needs depth, engagement needs curiosity
 
 As per documentation Section 6.2 Core System Prompt.
 """
@@ -145,105 +203,103 @@ ADVICE_PATTERNS = [
 # TWITTER CONTENT GENERATION (Stage 2 - After Approval)
 # ============================================================================
 
-# Twitter content generation prompt
+# Twitter content generation prompt - v3.0-adaptive (content-type based approach)
 # Converts approved 200-400 word explanations into Twitter posts (≤280 chars)
+# Key change: Adapts style based on content type (breaking news vs educational vs high-RPM)
 TWITTER_GENERATION_SINGLE = """
-    Create ONE analytical Twitter post from the content below.
+    You are an information provider and educator, not a news channel. Create a single tweet that ADAPTS its style based on content type.
 
     EVENT: {event_title}
     CONTENT: {poc_content}
 
-    STYLE:
-    - Calm, analytical, human
-    - Neutral by default
-    - Mild skepticism ONLY when the explanation is weak
-    - Sounds like a market commentator, not news or advice
+    ⚠️ CRITICAL: MUST fit in 240-260 characters (hard limit: 280)
 
-    DECISION RULE (IMPORTANT):
-    Choose ONE mode based on the strength of the explanation in the content.
+    📋 CONTENT-TYPE DECISION:
 
-    DEFAULT MODE (use this unless clearly inappropriate):
-    - FACT: describe what happened and add context. NO questioning.
+    TYPE 1: BREAKING NEWS → Event-first (WHO did WHAT + impact)
+    TYPE 2: EDUCATIONAL → Concept-first with news hook (What + How/Why)
+    TYPE 3: HIGH-RPM → Challenge narrative with data question
 
-    OTHER MODES (use ONLY if justified):
-    - CONTEXT: add nuance or mechanism when the move is clear but benefits from explanation. NO questioning.
-    - SCRUTINY: use ONLY if the explanation is vague, unsupported, or inconsistent with data.
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    TYPE 1: BREAKING NEWS (Event-First)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    When: Policy changes, rate decisions, enforcement actions
 
-    MODE RULES:
-    - FACT → zero skepticism
-    - CONTEXT → zero skepticism
-    - SCRUTINY → question the explanation, not the event
+    Format: WHO did WHAT + immediate impact
 
-    TWEET RULES:
-    - No advice (buy/sell/should/avoid)
-    - No predictions (will/expect/going to)
-    - No certainty words (guaranteed, clearly, obviously)
+    Example:
+    "Fed kept rates at 5.5%—unchanged since July 2023.
 
-    - TEMPORAL ACCURACY (CRITICAL):
-      If the event is unannounced, preliminary, proposal-based, or sourced to reports,
-      avoid definitive present tense.
-      Use attributed or reported framing (e.g., "reportedly includes", "sources say").
+    This keeps borrowing costs high for mortgages, car loans, and business credit."
 
-    - Use attribution words: "often linked to", "commonly attributed to", "narrative suggests"
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    TYPE 2: EDUCATIONAL (Concept-First with News Hook)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    When: Product launches, fund strategies, mechanisms
 
-    - Do NOT introduce new causal explanations or judgments
-      unless explicitly present in the content or clearly attributed.
+    Format: News hook + brief explanation of HOW/WHY
 
-    - Do NOT explain what markets, instruments, or concepts are.
-      Comment on THIS specific signal, not the general mechanism.
-      Wrong: "Prediction markets aggregate trader positioning"
-      Right: "The pricing reflects trader sentiment"
+    Example:
+    "ICICI Prudential launched iSIF Hybrid Long-Short Fund, using strategies that profit from both rising and falling prices.
 
-    - Avoid abstract generalizations or educational filler.
-      No: "correlations emerge", "dynamics reflect", "trends suggest"
-      Focus only on the specific event signal.
+    This affects investors seeking lower volatility through balanced equity-debt exposure."
 
-    - In FACT/CONTEXT modes, include ONE contrast word for depth
-      (despite, while, even as, though) when it improves clarity.
-      Do not use multiple contrasts - pick one.
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    TYPE 3: HIGH-RPM (Challenge with Data Question)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    When: Vague narratives, attribution claims
 
-    - You MAY ask ONE question ONLY in SCRUTINY mode
+    Format: State narrative + challenge with data question
 
-    - For prediction markets or probabilistic signals,
-      describe pricing as sentiment or positioning, not as a forecast.
+    Example:
+    "Markets fell on 'macro concerns' 📉
 
-    - Use 1 subtle emoji when it improves scannability (📊 📉 👀 ⚖️). Skip if unnecessary.
+    But which data actually changed? If concerns are rising, why aren't bond yields reflecting it?"
 
-    HASHTAG RULE (ABSOLUTE):
-    - You are FORBIDDEN from adding hashtags.
-    - Only exception: Specific entity names (#RBI, #SEBI, #Tesla) AND the entity is NOT already in the text.
-    - Generic topic hashtags (#Shutdown, #Markets, #Economy, #Polymarket) are BANNED.
-    - When in doubt: NO HASHTAG.
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    UNIVERSAL REQUIREMENTS
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    - Use 8th grade language
+    - EMOJIS: Optional contextual emojis (📊📉💰⚖️) if they enhance clarity
+    - NO hashtags (banned)
+    - NO advice/predictions/guarantees
+    - NO hype or urgency
 
-    FORMAT (NON-NEGOTIABLE):
-    - Write 1-3 short paragraphs depending on how many DISTINCT FACTUAL points you have
-    - If you have 1 factual point: Use 1 paragraph
-    - If you have 2-3 factual points: Use 2-3 paragraphs
-    - Do NOT add a second paragraph with abstract filler just to meet paragraph count
-    - MUST have a blank line between each paragraph (if using multiple)
-    - Each paragraph = 1-2 sentences maximum
-    - Clean, scannable layout
+    FORMAT:
+    - 1-2 short paragraphs max (blank line between)
+    - Each paragraph = 1 sentence
+    - COMPLETE sentences only—never truncate mid-sentence
 
-    CHARACTER LIMIT (CRITICAL):
-    - Target: 240-260 characters (absolute hard limit: 280)
-    - SENTENCE COMPLETENESS > CHARACTER LIMIT
-    - If your draft exceeds 260 characters, DELETE ENTIRE SENTENCES to fit
-    - NEVER truncate mid-sentence (e.g., "depends on broader political" - FORBIDDEN)
-    - Better to have 1 complete paragraph than 2 incomplete ones
-    - Before returning, verify every sentence ends with proper punctuation (. ! ?)
-    - If you cannot fit 2 complete paragraphs in 260 chars, use 1 paragraph instead
+    GOOD EXAMPLES (event-first, minimal education):
 
-    CRITICAL OUTPUT FORMAT:
-    Return ONLY the tweet text. Do NOT include any of the following:
+    Example 1 - Event + impact only (no term definition needed) (178 chars):
+    "Fed kept rates at 5.5%—unchanged since July 2023.
 
-    FORBIDDEN ADDITIONS:
-    1. Character counts
-    2. Meta-commentary
-    3. Compliance notes
-    4. Analysis notes
-    5. Draft markers
-    6. Reasoning process
-    7. Meta-analysis phrasing about the post itself
+    This keeps borrowing costs high for mortgages, car loans, and business credit. US rate now matches Canada's."
+
+    Example 2 - Event + impact + ONE term definition (243 chars):
+    "RBI fined a cooperative bank ₹1L for breaching "exposure limits."
+
+    These limits cap how much a bank can lend to one borrower. Think "don't put all eggs in one basket." RBI tightened these rules in 2014 after bank failures."
+
+    Example 3 - Event + impact, no education (164 chars):
+    "BOJ warned it may intervene to support the yen after hitting 150/dollar.
+
+    Intervention means buying yen to stop it from weakening further against the dollar."
+
+    BAD EXAMPLE (too educational, event buried):
+    "Repo rate is the rate at which RBI lends to banks. It affects all borrowing costs. RBI just cut it by 25 bps, which means loans will get cheaper..."
+    ❌ Education-first, not event-first!
+
+    BAD EXAMPLE (no event specificity):
+    "New crypto ETFs offer staking rewards to investors. They may increase returns but also bring unique risks."
+    ❌ WHO launched? WHEN? Could run any day—not event-anchored!
+
+    BAD EXAMPLE (too verbose):
+    "A Japanese official warned the yen might weaken further and said the government could step in to stabilize it. This means Japan might 'intervene' by buying/selling yen to influence its value..."
+    ❌ 300+ characters—way too long!
+
+    OUTPUT: Return ONLY the tweet text. No character counts, notes, or meta-commentary.
     """
 
 # Forbidden phrases for Twitter validation (more strict than FORBIDDEN_PHRASES)
@@ -267,42 +323,107 @@ TWITTER_ALLOWED_COMPOUNDS = [
 ]
 
 # Twitter Thread Generation Template
-TWITTER_GENERATION_THREAD = """Create a 2-5 tweet thread from this content based on complexity.
+# Version: v3.0-adaptive (content-type based approach)
+TWITTER_GENERATION_THREAD = """You are an information provider and educator, not a news channel. Create a 2-5 tweet thread that ADAPTS its style based on content type.
 
     EVENT: {event_title}
     CONTENT: {poc_content}
 
-    THREAD LENGTH GUIDANCE:
-    - 2 tweets: Simple market updates or brief announcements
-    - 3 tweets: Standard explanations (most common)
-    - 4 tweets: Complex policies requiring detailed mechanism
-    - 5 tweets: Multi-layered topics needing comprehensive breakdown
+    ⚠️ CRITICAL: Each tweet MUST fit in 220-260 characters (hard limit: 280)
 
-    LIMITS:
-    - CRITICAL: Each tweet MUST be 220-260 characters maximum (absolute hard limit: 280, but stay under 260)
-    - If any tweet exceeds 260 characters, you MUST cut content - never compromise on this limit
-    - Tweet 1 needs 🧵 emoji
-    - Use contrast words for depth (despite, while, even as, though)
-    - Use attribution uncertainty: "often linked to", "commonly attributed to"
-    - HASHTAG: Add 1 hashtag to last tweet only if it adds discovery value (specific entity). Skip if generic.
+    📋 CONTENT-TYPE DECISION TREE:
 
-    SAFETY: No advice (buy/sell/should/avoid), no predictions (will/expect), no guarantees.
+    TYPE 1: BREAKING NEWS (Policy changes, rate decisions, regulatory actions)
+    → Use EVENT-FIRST approach
+    → Example: "Fed kept rates at 5.5%—unchanged since July 2023. This keeps borrowing costs high. 🧵"
 
-    EXAMPLE (3-tweet thread):
-    TWEET1: Bitcoin slipped below $89k, extending weekly losses. Moves attributed to "weak crypto appetite." 🧵 That explanation is vague. If demand is fading, where's the evidence? 📊
-    TWEET2: Real demand signals: spot volumes, futures positioning, stablecoin flows. Price action alone doesn't confirm appetite shift — it could be leverage unwinds or profit-taking.
-    TWEET3: Which data actually backs the "weak appetite" claim? Without volume or flow evidence, it's just narrative-fitting. #Crypto #Markets
+    TYPE 2: EDUCATIONAL (Product launches, fund strategies, mechanisms, concepts)
+    → Use CONCEPT-FIRST WITH NEWS HOOK
+    → Example: "ICICI Prudential launched iSIF Hybrid Long-Short Fund, using long-short strategies. This affects investors seeking lower volatility. 🧵 [next tweet explains HOW it works]"
+
+    TYPE 3: HIGH-RPM ENGAGEMENT (Vague narratives, conventional wisdom, market explanations)
+    → Use QUESTION & CHALLENGE approach
+    → Example: "Markets fell on 'macro concerns' 🧵 But which data actually changed? 📊 [invite data-driven thinking]"
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    TYPE 1: BREAKING NEWS (Event-First)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    When: Policy changes, rate decisions, enforcement actions, market crashes
+
+    Structure:
+    TWEET1: WHO did WHAT + immediate impact 🧵
+    TWEET2: Context/reason for decision
+    TWEET3: What happens next (optional - only if needed)
+
+    Example 1 (2 tweets - Simple Update):
+    TWEET1: RBI extended co-lending norms to NBFCs for housing loans. This expands affordable credit access for first-time homebuyers. 🧵
+    TWEET2: Co-lending lets banks and NBFCs jointly fund loans—banks provide lower rates, NBFCs handle underwriting. This reduces borrowing costs for buyers with weaker credit profiles.
+
+    Example 2 (3 tweets - Complex Policy):
+    TWEET1: Fed kept rates at 5.5%—unchanged since July 2023. This keeps borrowing costs high for mortgages, car loans, and business credit. 🧵
+    TWEET2: The decision followed weaker jobs data but persistent inflation. Fed Chair Powell cited "progress on inflation" but said more data is needed.
+    TWEET3: Markets expected this hold. Next meeting in March will determine if rate cuts begin or rates stay elevated through Q2.
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    TYPE 2: EDUCATIONAL (Concept-First with News Hook)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    When: Product launches, fund strategies, new mechanisms, regulatory frameworks
+
+    Structure:
+    TWEET1: News hook + WHO + impact/audience 🧵
+    TWEET2-3: HOW it works (mechanism/concept explanation)
+    TWEET4: WHY it matters (broader implications - optional for simple concepts)
+
+    Example 1 (3 tweets - Medium Complexity):
+    TWEET1: ICICI Prudential launched iSIF Hybrid Long-Short Fund, using hybrid long-short strategies. This affects investors seeking lower volatility. 🧵
+    TWEET2: The fund combines equity and debt investments, taking "long" (buy) and "short" (sell) positions to profit from both price increases and decreases.
+    TWEET3: It uses derivatives for hedging and income, aiming to deliver consistent returns by adjusting market exposure based on valuations and conditions.
+
+    Example 2 (4 tweets - Complex Mechanism):
+    TWEET1: SEBI introduced T+0 settlement for select stocks. This means trades settle the same day instead of T+1 (next day). Affects day traders and liquidity. 🧵
+    TWEET2: In T+0, when you sell shares at 10 AM, funds hit your account by 3:30 PM the same day. Currently T+1 means you wait until next day.
+    TWEET3: The catch: You must hold shares in demat before selling. No more selling first and delivering later (intraday shorting changes). 📊
+    TWEET4: Why it matters: Faster fund access helps traders, but removes intraday leverage. Markets become more cash-based, potentially less volatile.
+
+    Key: Allow educational depth when teaching HOW/WHY. News hook is present but not dominant.
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    TYPE 3: HIGH-RPM ENGAGEMENT (Question & Challenge)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    When: Vague market narratives, attribution claims, conventional wisdom, unclear explanations
+
+    Structure:
+    TWEET1: State the narrative 🧵 Challenge it with a data question
+    TWEET2: What evidence SHOULD exist if narrative is true
+    TWEET3-5: Invite data-seeking replies, provide framework for analysis
+
+    Example 1 (3 tweets - Simple Challenge):
+    TWEET1: Markets fell on "macro concerns" 🧵 But which data actually changed? If concerns are rising, why aren't bond yields reflecting it? 📊
+    TWEET2: Real macro stress shows up in: credit spreads widening, volatility spiking, defensive sectors outperforming. Are we seeing those patterns?
+    TWEET3: When narratives are vague, what evidence should we look for? Which data would actually confirm this explanation?
+
+    Example 2 (5 tweets - Comprehensive Challenge):
+    TWEET1: "Foreign investors are fleeing Indian markets" 🧵 But are they really? Let's check what the data should show if this narrative is true. 📊
+    TWEET2: If FPIs are selling heavily, we'd expect: rupee weakening sharply, bond yields rising (as they dump debt), and IT stocks rallying (export benefit).
+    TWEET3: We'd also see: banking stocks falling (foreign capital withdrawal), domestic mutual funds absorbing the sell pressure, and volatility spiking. 📉
+    TWEET4: But if FPI selling is just rotation (selling large caps, buying small caps), the narrative changes completely. Same "outflow" headline, opposite meaning.
+    TWEET5: What data would confirm actual flight vs rotation? Track sector flows, rupee vs yields correlation, and domestic institution buying. Which pattern fits?
+
+    Key: Question vague claims, invite data-driven thinking, boost engagement through curiosity.
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    UNIVERSAL REQUIREMENTS (All Types)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    - Use 8th grade language
+    - EMOJIS: 🧵 in tweet 1 (required). Optional contextual emojis (📊📉💰⚖️)
+    - NO hashtags (banned)
+    - NO advice/predictions/guarantees ("you should buy", "will rise")
+    - NO hype or urgency
+    - COMPLETE sentences only—never truncate mid-sentence
 
     CRITICAL OUTPUT FORMAT:
-    Return 2-5 lines as "TWEET1:", "TWEET2:", "TWEET3:", "TWEET4:", "TWEET5:" (as many as needed). Do NOT include any of the following:
-
-    FORBIDDEN ADDITIONS:
-    1. Character counts: "(258 characters)", "(safe under 270)", "(within limit)"
-    2. Meta-commentary: "Tone is neutral", "No skepticism introduced", "This approach ensures"
-    3. Compliance notes: "No advice given", "No predictions made", "Safe for publication"
-    4. Analysis notes: "Explanation aligns with industry norms", "Context-based framing"
-    5. Draft markers: "Attempt 1", "Revised version", "Final draft"
-    6. Reasoning process: Why you chose certain words or structure
+    Return 2-5 lines as "TWEET1:", "TWEET2:", "TWEET3:", "TWEET4:", "TWEET5:"
+    NO character counts, meta-commentary, compliance notes, or reasoning explanations.
     """
 
 # Content strategies for different event types

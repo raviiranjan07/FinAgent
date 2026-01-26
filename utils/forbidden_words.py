@@ -57,6 +57,63 @@ WHITELIST_TERMS = {
     "stronghold": "hold",
 }
 
+# Institutional actors: when these precede buy/sell/hold verbs, it's descriptive, not advice
+# Format: list of actors that can perform actions without triggering forbidden phrase
+INSTITUTIONAL_ACTORS = [
+    "rbi", "sebi", "fed", "federal reserve", "ecb", "boj", "bank of japan",
+    "bank of england", "treasury", "central bank", "government",
+    "company", "companies", "firm", "firms", "corporation", "corporations",
+    "investor", "investors", "trader", "traders", "fund", "funds",
+    "institution", "institutions", "bank", "banks", "dealer", "dealers",
+    "market", "markets", "exchange", "stock exchange",
+]
+
+
+def has_institutional_actor(text: str, match_start: int, forbidden_word: str) -> bool:
+    """
+    Check if a buy/sell/hold verb is preceded by an institutional actor.
+
+    Examples that should be whitelisted:
+    - "BOJ buying yen" (educational description)
+    - "Company announces buyback" (third party action)
+    - "Investors buying bonds" (market description)
+
+    Examples that should NOT be whitelisted:
+    - "You should buy stocks" (advice to reader)
+    - "Recommended to buy" (advice)
+
+    Args:
+        text: Full text being checked
+        match_start: Start index of the match
+        forbidden_word: The forbidden word that was matched
+
+    Returns:
+        True if preceded by institutional actor (whitelist), False otherwise
+    """
+    # Only apply to buy/sell/hold verbs
+    if forbidden_word not in ["buy", "bought", "buying", "sell", "sold", "selling", "hold", "holding"]:
+        return False
+
+    text_lower = text.lower()
+
+    # Look backwards up to 50 characters for institutional actors
+    lookback_start = max(0, match_start - 50)
+    context_before = text_lower[lookback_start:match_start]
+
+    # Check if any institutional actor appears before the verb
+    for actor in INSTITUTIONAL_ACTORS:
+        if actor in context_before:
+            # Ensure the actor is reasonably close (not from previous sentence)
+            # Check that there's no sentence boundary (. ! ?) between actor and verb
+            actor_pos = context_before.rfind(actor)
+            text_between = context_before[actor_pos + len(actor):]
+
+            # If no sentence boundary, it's likely the actor performing the action
+            if not any(boundary in text_between for boundary in ['.', '!', '?']):
+                return True
+
+    return False
+
 
 def is_whitelisted(text: str, match_start: int, match_end: int, forbidden_word: str) -> bool:
     """
@@ -124,8 +181,12 @@ def detect_forbidden_phrases(text: str) -> List[Tuple[str, str]]:
             match_start = match.start()
             match_end = match.end()
 
-            # Check if this match is whitelisted
+            # Check if this match is whitelisted (compound term)
             if is_whitelisted(text, match_start, match_end, description):
+                continue
+
+            # Check if buy/sell/hold is used descriptively with institutional actor
+            if has_institutional_actor(text, match_start, description):
                 continue
 
             # Extract context (30 chars before and after)

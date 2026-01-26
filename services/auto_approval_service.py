@@ -31,6 +31,7 @@ from pgvector.sqlalchemy import Vector
 
 from database.models import Output, Evaluation, Event
 from database.connection import get_db_session
+from utils.timezone import get_ist_now
 
 logger = logging.getLogger(__name__)
 
@@ -268,7 +269,7 @@ class AutoApprovalService:
         ).fetchone()
 
         # Use cache if updated within last 24 hours
-        if cached and (datetime.utcnow() - cached[1]) < timedelta(hours=24):
+        if cached and (get_ist_now() - cached[1]) < timedelta(hours=24):
             return cached[0]
 
         # Calculate pass rate
@@ -340,7 +341,7 @@ class AutoApprovalService:
             "pass_rate": pass_rate,
             "total_count": total_count,
             "pass_count": pass_count,
-            "last_updated": datetime.utcnow()
+            "last_updated": get_ist_now()
         })
         self.db.commit()
 
@@ -421,7 +422,7 @@ class AutoApprovalService:
                 verdict="PASS",
                 comment=f"Auto-approved: {decision.reason}",
                 evaluator="auto_approval_service",
-                evaluated_at=datetime.utcnow()
+                evaluated_at=get_ist_now()
             )
 
             # Add auto-approval metadata (will be added after migration)
@@ -462,7 +463,7 @@ class AutoApprovalService:
             "similar_outputs": decision.signals.similar_outputs,
             "auto_approved": decision.should_auto_approve,
             "reason": decision.reason,
-            "created_at": datetime.utcnow()
+            "created_at": get_ist_now()
         })
         self.db.commit()
 
@@ -476,7 +477,7 @@ class AutoApprovalService:
         Returns:
             Dict with metrics: auto_approval_rate, avg_confidence, false_positive_rate
         """
-        since_date = datetime.utcnow() - timedelta(days=days)
+        since_date = get_ist_now() - timedelta(days=days)
 
         # Query auto_approval_history
         query = text("""

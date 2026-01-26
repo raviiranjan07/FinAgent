@@ -89,12 +89,9 @@ class SmartScheduler:
         # Return the most recent time (ensure timezone-aware)
         most_recent = max(times)
 
-        # Convert from UTC (database default) to IST
+        # Database stores naive IST timestamps - just add IST timezone info
         if most_recent.tzinfo is None:
-            from zoneinfo import ZoneInfo
-            UTC = ZoneInfo("UTC")
-            # Database stores UTC - convert to IST
-            most_recent = most_recent.replace(tzinfo=UTC).astimezone(self.IST)
+            most_recent = most_recent.replace(tzinfo=self.IST)
 
         return most_recent
 
@@ -326,13 +323,10 @@ class SmartScheduler:
                 # Normal jitter for all other cases
                 scheduled_time = self.add_time_jitter(current_time)
 
-            # Skip late night hours (9 PM - 8 AM) - move to next morning
-            if scheduled_time.hour >= 21 or scheduled_time.hour < 8:
-                # Move to next day at 8 AM
-                next_day = scheduled_time.date() + timedelta(days=1)
-                scheduled_time = datetime.combine(next_day, datetime.min.time()).replace(
-                    hour=8, minute=0, tzinfo=self.IST
-                )
+            # Skip dead night hours (1 AM - 5 AM only) - move to morning
+            if 1 <= scheduled_time.hour < 5:
+                # Move to same day at 5 AM (or next day if already past)
+                scheduled_time = scheduled_time.replace(hour=5, minute=0, second=0, microsecond=0)
                 # Add jitter to morning time
                 scheduled_time = self.add_time_jitter(scheduled_time)
 
@@ -406,10 +400,9 @@ class SmartScheduler:
         # Add jitter
         next_slot = self.add_time_jitter(next_slot)
 
-        # If it's too late (after 9 PM), move to next morning
-        if next_slot.hour >= 21:  # After 9 PM
-            next_slot = next_slot + timedelta(days=1)
-            next_slot = next_slot.replace(hour=8, minute=0)  # 8 AM next day
+        # If it's dead of night (1-5 AM), move to 5 AM same day
+        if 1 <= next_slot.hour < 5:
+            next_slot = next_slot.replace(hour=5, minute=0, second=0, microsecond=0)
             next_slot = self.add_time_jitter(next_slot)
 
         return next_slot

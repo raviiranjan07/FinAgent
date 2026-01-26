@@ -88,7 +88,12 @@ export function Events() {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "N/A"
-    return new Date(dateString).toLocaleString()
+    const formatted = new Date(dateString).toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      dateStyle: "medium",
+      timeStyle: "short",
+    })
+    return `${formatted} IST`
   }
 
   if (isLoading) {

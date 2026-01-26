@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from database.models import Event, Output, Evaluation, ContentQueue
 from database.connection import get_db_session
+from utils.timezone import get_ist_now
 
 
 class DataRetentionService:
@@ -41,7 +42,7 @@ class DataRetentionService:
 
     def get_cutoff_date(self) -> datetime:
         """Calculate the cutoff date for data retention."""
-        return datetime.utcnow() - timedelta(days=self.retention_days)
+        return get_ist_now() - timedelta(days=self.retention_days)
 
     def cleanup_old_data(self, dry_run: bool = False) -> Dict[str, Any]:
         """

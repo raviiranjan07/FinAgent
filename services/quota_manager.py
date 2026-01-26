@@ -11,6 +11,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 from pathlib import Path
+from utils.timezone import get_ist_now
 
 # IST is UTC+5:30
 IST_OFFSET = timedelta(hours=5, minutes=30)
@@ -63,7 +64,7 @@ class QuotaManager:
                     "reset_at": None,
                     "last_429_at": None
                 },
-                "last_updated": datetime.utcnow().isoformat()
+                "last_updated": get_ist_now().isoformat()
             }
             self._write_quota_state(initial_state)
 
@@ -82,7 +83,7 @@ class QuotaManager:
     def _write_quota_state(self, state: Dict[str, Any]):
         """Write quota state to file (thread-safe)."""
         with self._file_lock:
-            state["last_updated"] = datetime.utcnow().isoformat()
+            state["last_updated"] = get_ist_now().isoformat()
             with open(self.quota_file, 'w') as f:
                 json.dump(state, f, indent=2)
 
@@ -92,7 +93,7 @@ class QuotaManager:
         Called on initialization to ensure quota file is up-to-date.
         """
         state = self._read_quota_state()
-        now = datetime.utcnow()
+        now = get_ist_now()
 
         for api in ["groq", "gemini_primary", "gemini_secondary"]:
             api_state = state.get(api, {})
@@ -126,7 +127,7 @@ class QuotaManager:
             raise ValueError(f"Invalid API: {api}. Must be 'groq', 'gemini_primary', or 'gemini_secondary'")
 
         state = self._read_quota_state()
-        now = datetime.utcnow()
+        now = get_ist_now()
         reset_at = now + timedelta(hours=reset_hours)
 
         state[api]["exhausted"] = True
@@ -166,7 +167,7 @@ class QuotaManager:
         reset_at_str = api_state.get("reset_at")
         if reset_at_str:
             reset_at = datetime.fromisoformat(reset_at_str)
-            now = datetime.utcnow()
+            now = get_ist_now()
 
             if now >= reset_at:
                 # Reset time passed, mark as available
@@ -260,7 +261,7 @@ class QuotaManager:
             Dictionary with status for each API
         """
         state = self._read_quota_state()
-        now = datetime.utcnow()
+        now = get_ist_now()
 
         status = {}
         for api in ["groq", "gemini_primary", "gemini_secondary"]:

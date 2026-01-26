@@ -1,0 +1,60 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv
+ENV
+env
+.eggs
+*.egg-info
+.mypy_cache
+.pytest_cache
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Node (dashboard has its own Dockerfile)
+dashboard/node_modules
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+doc/
+*.md
+!README.md
+
+# Tests
+test_*.py
+*_test.py
+
+# Misc
+.DS_Store
+Thumbs.db
+*.sql
+*.backup
+
+# Build artifacts
+dist/
+build/

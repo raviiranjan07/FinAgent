@@ -16,7 +16,9 @@
       "Bash(PGPASSWORD=finagent_secret pg_dump -U finagent -h localhost -d finagent)",
       "Bash(echo:*)",
       "Bash(find:*)",
-      "Bash(.venvScriptspython.exe run_pipeline.py)"
+      "Bash(.venvScriptspython.exe run_pipeline.py)",
+      "Bash(dir:*)",
+      "Bash(powershell:*)"
     ]
   }
 }

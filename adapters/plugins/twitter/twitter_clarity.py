@@ -69,12 +69,15 @@ class TwitterClarityAdapter:
         # Extract tweets based on format
         if twitter_content["format"] == "SINGLE":
             tweets = [twitter_content["tweet"]]
-        else:  # THREAD
-            tweets = [
-                twitter_content["tweets"]["tweet1"],
-                twitter_content["tweets"]["tweet2"],
-                twitter_content["tweets"]["tweet3"]
-            ]
+        else:  # THREAD (2-5 tweets, dynamic length)
+            tweet_count = twitter_content.get("tweet_count", 3)
+            tweets = []
+            for i in range(1, tweet_count + 1):
+                tweet_key = f"tweet{i}"
+                if tweet_key in twitter_content.get("tweets", {}):
+                    tweets.append(twitter_content["tweets"][tweet_key])
+                else:
+                    print(f"[{self.name}] Warning: Missing {tweet_key} in thread content")
 
         # Validate each tweet
         for idx, tweet in enumerate(tweets, 1):

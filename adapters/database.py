@@ -8,6 +8,7 @@ from adapters.base import BaseAdapter
 from adapters.context import ExecutionContext
 from database.connection import get_db_session
 from database.repository import RepositoryManager
+from utils.timezone import get_ist_now
 
 
 class DatabaseAdapter(BaseAdapter):
@@ -63,7 +64,7 @@ class DatabaseAdapter(BaseAdapter):
                     "link": context.event.url,
                     "source": context.event.source,
                     "published_at": self._parse_datetime(context.event.published_at),
-                    "fetched_at": datetime.utcnow(),
+                    "fetched_at": get_ist_now(),
                     "embedding": context.event_embedding,
                 }
 

@@ -30,6 +30,64 @@ const XLogo = ({ className = "h-4 w-4" }: { className?: string }) => (
   </svg>
 )
 
+// Helper to parse single tweet content from wrapped format
+function parseSingleContent(content: string): string {
+  try {
+    const parsed = JSON.parse(content)
+    // Handle wrapped format: {"format": "SINGLE", "content": {"tweet": "..."}}
+    if (parsed?.content?.tweet) {
+      return parsed.content.tweet
+    }
+  } catch {
+    // Not valid JSON, return as-is
+  }
+  return content
+}
+
+// Helper to parse thread content from wrapped format
+function parseThreadContent(content: string): string[] {
+  try {
+    const parsed = JSON.parse(content)
+    // Handle wrapped format: {"format": "THREAD", "content": {"tweets": [...]}}
+    if (parsed?.content?.tweets && Array.isArray(parsed.content.tweets)) {
+      return parsed.content.tweets
+    }
+    // Handle simple array format (legacy)
+    if (Array.isArray(parsed)) {
+      return parsed
+    }
+  } catch {
+    // Not valid JSON
+  }
+  return [content]
+}
+
+// Thread display component
+function ThreadDisplay({ tweets }: { tweets: string[] }) {
+  return (
+    <div className="space-y-3">
+      {tweets.map((tweet, idx) => (
+        <div
+          key={idx}
+          className="border-l-2 border-blue-500 pl-3 space-y-1"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              Post {idx + 1}/{tweets.length}
+            </span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {tweet.length} chars
+            </span>
+          </div>
+          <p className="text-sm text-gray-900 dark:text-white whitespace-pre-wrap">
+            {tweet}
+          </p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // Schedule Display Component with Countdown
 function ScheduleDisplay({ scheduledFor }: { scheduledFor: string }) {
   const [timeLeft, setTimeLeft] = useState("")
@@ -221,6 +279,18 @@ export function GeneratedContent() {
     },
   })
 
+  const resetForRepublish = useMutation({
+    mutationFn: (contentQueueId: string) => schedulingApi.resetForRepublish(contentQueueId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["twitter-content"] })
+      alert("✅ Content reset! You can now republish it.")
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.detail || error.message || "Failed to reset for republish"
+      alert(`❌ Reset failed: ${errorMessage}`)
+    },
+  })
+
   const approveHITL = useMutation({
     mutationFn: (contentQueueId: string) => twitterApi.approveHITL(contentQueueId),
     onSuccess: () => {
@@ -385,6 +455,16 @@ export function GeneratedContent() {
 
     if (confirmPublish) {
       publishNow.mutate(item.id)
+    }
+  }
+
+  const handleResetForRepublish = (item: TwitterContentItem) => {
+    const confirmReset = confirm(
+      `Reset this content for republishing?\n\n"${item.event_title}"\n\nThis will:\n• Clear the published status\n• Allow you to schedule or publish again\n\nUse this if you deleted the tweet from X and want to post it again.`
+    )
+
+    if (confirmReset) {
+      resetForRepublish.mutate(item.id)
     }
   }
 
@@ -581,7 +661,7 @@ export function GeneratedContent() {
                       >
                         <MessageSquare className="h-3 w-3" />
                         {item.format}
-                        {item.format === "THREAD" && ` (${item.thread_length} posts)`}
+                        {item.format === "THREAD" && ` (${item.tweets?.length || parseThreadContent(item.content_text || "").length} posts)`}
                       </Badge>
                       <Badge className={`flex items-center gap-1 ${getStatusColor(item.status)}`}>
                         {getStatusIcon(item.status)}
@@ -642,38 +722,24 @@ export function GeneratedContent() {
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
                       <XLogo className="h-4 w-4 text-blue-500" />
-                      {item.format === "SINGLE" ? "Post" : `Thread (${item.thread_length} posts)`}
+                      {item.format === "SINGLE" ? "Post" : `Thread (${item.tweets?.length || parseThreadContent(item.content_text || "").length} posts)`}
                     </h4>
                     <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {item.content_text.length} chars
+                      {item.format === "SINGLE"
+                        ? `${parseSingleContent(item.edited_content || item.content_text || "").length} chars`
+                        : `${(item.tweets || parseThreadContent(item.content_text || "")).length} tweets`
+                      }
                     </span>
                   </div>
 
                   {item.format === "SINGLE" ? (
                     <p className="text-gray-900 dark:text-white whitespace-pre-wrap">
-                      {item.edited_content || item.content_text}
+                      {parseSingleContent(item.edited_content || item.content_text || "")}
                     </p>
                   ) : (
-                    <div className="space-y-3">
-                      {item.tweets?.map((tweet, idx) => (
-                        <div
-                          key={idx}
-                          className="border-l-2 border-blue-500 pl-3 space-y-1"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                              Post {idx + 1}/{item.thread_length}
-                            </span>
-                            <span className="text-xs text-gray-500 dark:text-gray-400">
-                              {tweet.length} chars
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-900 dark:text-white whitespace-pre-wrap">
-                            {tweet}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
+                    <ThreadDisplay
+                      tweets={item.tweets || parseThreadContent(item.edited_content || item.content_text || "")}
+                    />
                   )}
 
                   {item.hashtags && (
@@ -883,21 +949,35 @@ export function GeneratedContent() {
 
                   {/* Published Status */}
                   {item.status === "published" && (
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                        Published on {item.published_at && formatDate(item.published_at)}
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                          Published on {item.published_at && formatDate(item.published_at)}
+                        </div>
+                        {item.twitter_post_id?.startsWith("dry_run_") && (
+                          <Badge variant="outline" className="text-yellow-600 dark:text-yellow-400 border-yellow-400">
+                            🧪 DRY RUN
+                          </Badge>
+                        )}
+                        {item.twitter_post_id && !item.twitter_post_id.startsWith("dry_run_") && (
+                          <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-400">
+                            ✓ LIVE
+                          </Badge>
+                        )}
                       </div>
-                      {item.twitter_post_id?.startsWith("dry_run_") && (
-                        <Badge variant="outline" className="text-yellow-600 dark:text-yellow-400 border-yellow-400">
-                          🧪 DRY RUN
-                        </Badge>
-                      )}
-                      {item.twitter_post_id && !item.twitter_post_id.startsWith("dry_run_") && (
-                        <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-400">
-                          ✓ LIVE
-                        </Badge>
-                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleResetForRepublish(item)}
+                          disabled={resetForRepublish.isPending}
+                          className="flex items-center gap-1"
+                        >
+                          <RefreshCw className={`h-3 w-3 ${resetForRepublish.isPending ? "animate-spin" : ""}`} />
+                          {resetForRepublish.isPending ? "Resetting..." : "Republish"}
+                        </Button>
+                      </div>
                     </div>
                   )}
 
@@ -943,9 +1023,10 @@ export function GeneratedContent() {
             setSelectedContent(null)
           }}
           onSave={handleSaveEdit}
-          originalContent={selectedContent.content_text}
+          originalContent={selectedContent.content_text || ""}
           currentEditedContent={selectedContent.edited_content}
           hashtags={selectedContent.hashtags ? [selectedContent.hashtags] : []}
+          format={selectedContent.format as "SINGLE" | "THREAD"}
         />
       )}
 

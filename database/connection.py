@@ -4,22 +4,29 @@ import os
 from contextlib import contextmanager
 from typing import Generator
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 
 from database.models import Base
 
-# Database URL from environment or default
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://finagent:finagent_secret@localhost:5432/finagent"
-)
+# Load environment variables from .env file
+load_dotenv()
+
+# Database URL from environment (REQUIRED - no hardcoded defaults)
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise ValueError(
+        "DATABASE_URL environment variable is required. "
+        "Set it in .env file: DATABASE_URL=postgresql://user:password@host:port/dbname"
+    )
 
 # Create engine with connection pooling
 engine = create_engine(
     DATABASE_URL,
-    pool_size=5,
-    max_overflow=10,
+    pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
+    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),
     pool_pre_ping=True,  # Verify connections before using
     echo=os.getenv("SQL_DEBUG", "false").lower() == "true"
 )

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from database.models import Event, Output, Evaluation, ContentQueue
 from database.connection import get_db_session
+from utils.timezone import get_ist_now
 
 
 class EventRepository:
@@ -38,7 +39,7 @@ class EventRepository:
 
     def get_recent(self, hours: int = 72, limit: int = 1000) -> List[Event]:
         """Get events from last N hours."""
-        cutoff = datetime.utcnow() - timedelta(hours=hours)
+        cutoff = get_ist_now() - timedelta(hours=hours)
         return (
             self.db.query(Event)
             .filter(Event.created_at >= cutoff)
@@ -496,7 +497,7 @@ class ContentQueueRepository:
 
     def get_ready_to_publish(self) -> List[ContentQueue]:
         """Get content scheduled for now or past."""
-        now = datetime.utcnow()
+        now = get_ist_now()
         return (
             self.db.query(ContentQueue)
             .filter(ContentQueue.status == "scheduled")
@@ -510,7 +511,7 @@ class ContentQueueRepository:
         content = self.get_by_id(content_id)
         if content:
             content.status = status
-            content.updated_at = datetime.utcnow()
+            content.updated_at = get_ist_now()
             self.db.flush()
         return content
 
@@ -521,7 +522,7 @@ class ContentQueueRepository:
             content.status = "approved"
             if edited_content:
                 content.edited_content = edited_content
-            content.updated_at = datetime.utcnow()
+            content.updated_at = get_ist_now()
             self.db.flush()
         return content
 
@@ -536,19 +537,19 @@ class ContentQueueRepository:
             content.status = "scheduled"
             content.scheduled_for = scheduled_for
             content.platform = platform
-            content.updated_at = datetime.utcnow()
+            content.updated_at = get_ist_now()
             self.db.flush()
         return content
 
-    def mark_published(self, content_id: UUID, platform_post_id: str = None) -> Optional[ContentQueue]:
+    def mark_published(self, content_id: UUID, twitter_post_id: str = None) -> Optional[ContentQueue]:
         """Mark content as published."""
         content = self.get_by_id(content_id)
         if content:
             content.status = "published"
-            content.published_at = datetime.utcnow()
-            if platform_post_id:
-                content.platform_post_id = platform_post_id
-            content.updated_at = datetime.utcnow()
+            content.published_at = get_ist_now()
+            if twitter_post_id:
+                content.twitter_post_id = twitter_post_id
+            content.updated_at = get_ist_now()
             self.db.flush()
         return content
 

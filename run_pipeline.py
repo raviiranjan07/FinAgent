@@ -108,17 +108,20 @@ def is_duplicate_url(url: str) -> bool:
 
 def get_date_cutoff():
     """
-    Calculate cutoff date for fetching events (2 days ago at midnight).
+    Calculate cutoff date for fetching events (2 days ago at midnight IST).
 
-    Example: If today is Jan 24, 2026 at 3pm:
+    Example: If today is Jan 24, 2026 at 3pm IST:
     - Keep: Jan 24, Jan 23, Jan 22
     - Reject: Jan 21 and older
 
     Returns:
-        datetime: Cutoff datetime (2 days ago at 00:00:00 UTC)
+        datetime: Cutoff datetime (2 days ago at 00:00:00 IST, timezone-aware)
     """
-    now = datetime.utcnow()
-    # Go back 2 days and set to midnight
+    from datetime import timezone
+    # IST is UTC+5:30
+    IST = timezone(timedelta(hours=5, minutes=30))
+    now = datetime.now(IST)
+    # Go back 2 days and set to midnight IST (timezone-aware for comparison)
     cutoff = (now - timedelta(days=2)).replace(hour=0, minute=0, second=0, microsecond=0)
     return cutoff
 
@@ -186,9 +189,9 @@ def fetch_events(source_name: str, url: str, quota: int = MAX_EVENTS) -> list:
             key=lambda e: email.utils.parsedate_to_datetime(e.get("published", "")) if e.get("published") else datetime.fromtimestamp(0),
             reverse=True
         )
-    except (ValueError, TypeError):
-        # If parsing fails, use original order
-        pass
+    except (ValueError, TypeError) as e:
+        # If parsing fails, use original order (log warning for debugging)
+        print(f"  WARNING: Date sorting failed ({e}), using original feed order")
 
     # Calculate date cutoff (2 days ago at midnight)
     date_cutoff = get_date_cutoff()

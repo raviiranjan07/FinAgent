@@ -26,8 +26,35 @@ class HITLService:
     # High-risk event types that always require review
     HIGH_RISK_EVENT_TYPES = ["FINANCE_POLICY", "MACRO_ECONOMIC"]
 
-    # Known sources that have been validated
-    VALIDATED_SOURCES = ["RBI_PRESS", "BLOOMBERG_MARKETS"]
+    # Known sources that have been validated (all configured RSS sources)
+    # These are official central banks, regulators, and established news outlets
+    VALIDATED_SOURCES = [
+        # OFFICIAL - Central Banks
+        "RBI_PRESS",
+        "FED_ALL",
+        "FED_MONETARY",
+        "ECB_PRESS",
+        # OFFICIAL - Regulators
+        "SEBI",
+        # NEWS - Global
+        "BLOOMBERG_MARKETS",
+        "FINANCIAL_TIMES",
+        # NEWS - India
+        "ET_MARKETS",
+        "ET_ECONOMY",
+        "MONEYCONTROL",
+        "LIVEMINT",
+        # NEWS - US
+        "CNBC_TOP",
+        "CNBC_WORLD",
+        "MARKETWATCH",
+        "YAHOO_FINANCE",
+        # SPECIALTY - Crypto
+        "COINDESK",
+        "COINTELEGRAPH",
+        "BITCOIN_MAGAZINE",
+        "INVESTING_CRYPTO",
+    ]
 
     @classmethod
     def make_decision(

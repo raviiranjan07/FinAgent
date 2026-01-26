@@ -62,7 +62,10 @@ you should, must act, risk-free, certain profit, recommended to, act now
 - ✅ Scheduling system
 - ✅ Twitter publishing integration (DRY RUN mode active)
 - ✅ Architecture v2.0 refactoring (plugin namespace, versioning, validation)
+- ✅ Automated RSS ingestion worker (runs every 4 hours)
+- ✅ Automated Twitter publishing worker (runs every 60 seconds)
 - ⏳ Analytics dashboard (pending)
+- ⏳ Auto-approval system for high-confidence content (pending)
 
 ### Recent Updates (January 2026)
 

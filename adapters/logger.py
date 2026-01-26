@@ -5,6 +5,7 @@ import datetime
 from adapters.base import BaseAdapter
 from adapters.context import ExecutionContext
 from config.settings import EVENTS_LOG_FILE
+from utils.timezone import get_ist_now
 
 
 class LoggerAdapter(BaseAdapter):
@@ -23,7 +24,7 @@ class LoggerAdapter(BaseAdapter):
         """Log the complete context to JSONL file."""
         # Build the log record
         record = {
-            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "timestamp": get_ist_now().isoformat(),
             "event_id": context.event.event_id,
             "source": context.event.source,
             "title": context.event.title,

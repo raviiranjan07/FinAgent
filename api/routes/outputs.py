@@ -3,9 +3,12 @@
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from uuid import UUID
+from sqlalchemy import desc
+from sqlalchemy.orm import joinedload
 
 from database.connection import get_db_session
 from database.repository import RepositoryManager
+from database.models import Output, Event, Evaluation
 from api.schemas.schemas import (
     OutputResponse,
     OutputListResponse,
@@ -31,63 +34,60 @@ async def list_outputs(
     Args:
         pending_only: Only show outputs without evaluation
         hitl_only: Only show outputs requiring HITL review
+
+    Performance: Uses joinedload to fetch related data in 1-2 queries
+    instead of N+1 queries. Uses offset/limit for efficient pagination.
     """
     with get_db_session() as db:
         repo = RepositoryManager(db)
 
-        # Get outputs based on filters (sorted by event published date)
-        from sqlalchemy import desc
-        from database.models import Output, Event
+        # Base query with eager loading (prevents N+1 queries)
+        base_query = (
+            db.query(Output)
+            .join(Event, Output.event_id == Event.id)
+            .options(
+                joinedload(Output.event),       # Eager load event
+                joinedload(Output.evaluations)  # Eager load evaluations
+            )
+            .order_by(desc(Event.published_at))
+        )
 
+        # Apply filters
         if pending_only:
-            outputs = (
+            # Use outerjoin to find outputs without evaluations
+            base_query = (
                 db.query(Output)
                 .join(Event, Output.event_id == Event.id)
-                .filter(Output.evaluations == None)
+                .outerjoin(Evaluation, Output.id == Evaluation.output_id)
+                .filter(Evaluation.id.is_(None))  # No evaluation exists
+                .options(
+                    joinedload(Output.event),
+                    joinedload(Output.evaluations)
+                )
                 .order_by(desc(Event.published_at))
-                .limit(page_size * page)
-                .all()
             )
         elif hitl_only:
-            outputs = (
-                db.query(Output)
-                .join(Event, Output.event_id == Event.id)
-                .filter(Output.hitl_required == True)
-                .order_by(desc(Event.published_at))
-                .limit(page_size * page)
-                .all()
-            )
+            base_query = base_query.filter(Output.hitl_required == True)
         elif event_type:
-            outputs = (
-                db.query(Output)
-                .join(Event, Output.event_id == Event.id)
-                .filter(Output.event_type == event_type)
-                .order_by(desc(Event.published_at))
-                .limit(page_size * page)
-                .all()
-            )
-        else:
-            # Get all recent outputs sorted by event published date
-            outputs = (
-                db.query(Output)
-                .join(Event, Output.event_id == Event.id)
-                .order_by(desc(Event.published_at))
-                .limit(page_size * page)
-                .all()
-            )
+            base_query = base_query.filter(Output.event_type == event_type)
 
-        # Get total count
-        total = repo.outputs.count()
+        # Get total count for this filter
+        total = base_query.count()
 
-        # Calculate pagination
+        # Apply pagination with offset/limit (efficient - only loads needed records)
+        outputs = (
+            base_query
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+
+        # Calculate pagination info
         total_pages = (total + page_size - 1) // page_size
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        paginated_outputs = outputs[start_idx:end_idx]
 
-        # Convert to response
+        # Convert to response (no additional queries - data already loaded)
         items = []
-        for output in paginated_outputs:
+        for output in outputs:
             has_evaluation = len(output.evaluations) > 0 if output.evaluations else False
             evaluation_verdict = output.evaluations[0].verdict if has_evaluation else None
 

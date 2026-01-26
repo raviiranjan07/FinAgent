@@ -16,6 +16,7 @@ from api.schemas.schemas import (
     AgreementMetrics,
     DisagreementExample,
 )
+from utils.timezone import get_ist_now
 
 router = APIRouter()
 
@@ -83,7 +84,7 @@ async def get_dashboard_stats():
         from datetime import datetime, timedelta
         from sqlalchemy import func
 
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        seven_days_ago = get_ist_now() - timedelta(days=7)
 
         # Count events per day
         daily_events = (
@@ -240,24 +241,27 @@ async def get_publishing_analytics(days: int = 30):
     from collections import defaultdict
 
     with get_db_session() as db:
-        # Calculate date range
-        end_date = datetime.utcnow()
-        start_date = end_date - timedelta(days=days)
+        # Calculate date range (all in IST - DB stores naive IST timestamps)
+        end_date = get_ist_now()
+        start_date_ist = end_date - timedelta(days=days)
+
+        # Database stores naive IST timestamps, extract date directly
+        ist_date = func.date(ContentQueue.published_at)
 
         # Query published content with date grouping (include all published)
         published_items = (
             db.query(
-                func.date(ContentQueue.published_at).label("date"),
+                ist_date.label("date"),
                 ContentQueue.format,
                 func.count(ContentQueue.id).label("count")
             )
             .filter(
                 ContentQueue.status == "published",
                 ContentQueue.published_at.isnot(None),
-                ContentQueue.published_at >= start_date,
+                ContentQueue.published_at >= start_date_ist,
             )
-            .group_by(func.date(ContentQueue.published_at), ContentQueue.format)
-            .order_by(func.date(ContentQueue.published_at))
+            .group_by(ist_date, ContentQueue.format)
+            .order_by(ist_date)
             .all()
         )
 
@@ -303,8 +307,8 @@ async def get_publishing_analytics(days: int = 30):
         # Build daily stats structure with ALL dates in range (fill missing with 0)
         daily_stats = {}
 
-        # First, create entries for ALL dates in the range
-        current_date = start_date
+        # First, create entries for ALL dates in the range (using IST dates)
+        current_date = start_date_ist
         while current_date <= end_date:
             date_str = current_date.strftime("%Y-%m-%d")
             daily_stats[date_str] = {
@@ -341,7 +345,7 @@ async def get_publishing_analytics(days: int = 30):
             "dry_run_count": dry_run_count,
             "by_format": format_summary,
             "date_range": {
-                "start": start_date.strftime("%Y-%m-%d"),
+                "start": start_date_ist.strftime("%Y-%m-%d"),
                 "end": end_date.strftime("%Y-%m-%d"),
                 "days": days
             }

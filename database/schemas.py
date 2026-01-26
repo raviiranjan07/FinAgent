@@ -28,27 +28,44 @@ class TwitterSingleContent(BaseModel):
         return v.strip()
 
     def to_db_format(self) -> str:
-        """Convert to database storage format (plain string)."""
-        return self.tweet
+        """Convert to database storage format (JSON)."""
+        return json.dumps({
+            "format": "SINGLE",
+            "content": {"tweet": self.tweet}
+        })
 
     @classmethod
     def from_db_format(cls, db_value: str):
-        """Load from database storage format."""
+        """Load from database storage format (handles both nested JSON and plain string)."""
+        try:
+            # Try parsing as nested JSON first (new format)
+            parsed = json.loads(db_value)
+            if isinstance(parsed, dict):
+                if "content" in parsed and "tweet" in parsed["content"]:
+                    return cls(tweet=parsed["content"]["tweet"])
+                elif "tweet" in parsed:
+                    return cls(tweet=parsed["tweet"])
+            # If it's a plain string after JSON parse, use it directly
+            if isinstance(parsed, str):
+                return cls(tweet=parsed)
+        except json.JSONDecodeError:
+            pass
+        # Fallback: treat as plain string (legacy format)
         return cls(tweet=db_value)
 
 
 class TwitterThreadContent(BaseModel):
     """Schema for THREAD format Twitter content.
 
-    Validates that a thread has exactly 3 tweets, each properly formatted.
+    Validates that a thread has 2-5 tweets (dynamic length), each properly formatted.
     """
-    tweets: List[str] = Field(..., min_items=3, max_items=3)
+    tweets: List[str] = Field(..., min_items=2, max_items=5)
 
     @validator('tweets')
     def validate_tweets(cls, tweets):
         """Validate each tweet in the thread."""
-        if len(tweets) != 3:
-            raise ValueError(f"Thread must have exactly 3 tweets, got {len(tweets)}")
+        if len(tweets) < 2 or len(tweets) > 5:
+            raise ValueError(f"Thread must have 2-5 tweets, got {len(tweets)}")
 
         for i, tweet in enumerate(tweets, 1):
             # Check not empty
@@ -62,14 +79,29 @@ class TwitterThreadContent(BaseModel):
         return [t.strip() for t in tweets]
 
     def to_db_format(self) -> str:
-        """Convert to database storage format (JSON array)."""
-        return json.dumps(self.tweets)
+        """Convert to database storage format (JSON)."""
+        return json.dumps({
+            "format": "THREAD",
+            "content": {"tweets": self.tweets}
+        })
 
     @classmethod
     def from_db_format(cls, db_value: str):
-        """Load from database storage format."""
-        tweets = json.loads(db_value)
-        return cls(tweets=tweets)
+        """Load from database storage format (handles both nested JSON and plain array)."""
+        try:
+            parsed = json.loads(db_value)
+            if isinstance(parsed, dict):
+                # Nested JSON format: {"format": "THREAD", "content": {"tweets": [...]}}
+                if "content" in parsed and "tweets" in parsed["content"]:
+                    return cls(tweets=parsed["content"]["tweets"])
+                elif "tweets" in parsed:
+                    return cls(tweets=parsed["tweets"])
+            # Plain array format: ["tweet1", "tweet2", ...]
+            if isinstance(parsed, list):
+                return cls(tweets=parsed)
+        except json.JSONDecodeError:
+            pass
+        raise ValueError(f"Invalid THREAD content format: {db_value[:100]}...")
 
 
 class TwitterContent(BaseModel):

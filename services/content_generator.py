@@ -14,6 +14,7 @@ from config.prompts import (
     TWITTER_FORBIDDEN_PHRASES,
     TWITTER_ALLOWED_COMPOUNDS
 )
+from utils.timezone import get_ist_now
 
 
 class ContentGeneratorService:
@@ -147,7 +148,7 @@ Please generate a corrected version that fixes these issues while maintaining th
             content_text=twitter_text,
             hashtags=hashtags,
             character_count=len(twitter_text),
-            generated_at=datetime.utcnow()
+            generated_at=get_ist_now()
         )
 
         db.add(generated)
@@ -195,9 +196,7 @@ Please generate a corrected version that fixes these issues while maintaining th
         if found_forbidden:
             errors.append(f"Contains forbidden phrases: {', '.join(found_forbidden)}")
 
-        # Check for hashtags
-        if "#" not in content:
-            errors.append("No hashtags found")
+        # Hashtag check removed - v2.0-educator bans hashtags (aligned with new prompt)
 
         # Check minimum length (too short = not useful)
         if len(content) < 50:

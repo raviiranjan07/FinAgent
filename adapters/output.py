@@ -8,6 +8,7 @@ from adapters.context import ExecutionContext
 from config.settings import MAX_CONTENT_LENGTH, PROMPT_VERSION
 from config.prompts import SYSTEM_PROMPT, INTENT_TASKS
 from services.llm_service import LLMService
+from utils.timezone import get_ist_now
 
 
 class OutputAdapter(BaseAdapter):
@@ -28,7 +29,7 @@ class OutputAdapter(BaseAdapter):
     """
 
     name = "output_adapter"
-    version = "1.4.0"
+    version = "1.5.0"  # Fixed: Reuse EmbeddingService instance instead of creating new one each call
     input_keys = ["event", "event_type", "intent"]
     output_keys = ["llm_output"]
 
@@ -49,9 +50,17 @@ class OutputAdapter(BaseAdapter):
         If information is limited, state the facts available and note what is unclear."""
 
     def __init__(self):
-        """Initialize adapter with LLM service."""
+        """Initialize adapter with LLM service and lazy-loaded embedding service."""
         super().__init__()
         self.llm = LLMService()
+        self._embedding_service = None  # Lazy-loaded to avoid loading model if not needed
+
+    def _get_embedding_service(self):
+        """Get or create embedding service (lazy initialization)."""
+        if self._embedding_service is None:
+            from utils.embeddings import EmbeddingService
+            self._embedding_service = EmbeddingService()
+        return self._embedding_service
 
     def _is_refusal(self, response: str) -> bool:
         """Check if LLM response is a refusal to provide content."""
@@ -162,7 +171,7 @@ class OutputAdapter(BaseAdapter):
             },
 
             # Timing and context
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": get_ist_now().isoformat(),
             "generation_duration_ms": generation_duration_ms,
             "event_type": context.event_type,
             "intent": context.intent,
@@ -173,8 +182,7 @@ class OutputAdapter(BaseAdapter):
 
         # Generate embedding for the output text (for similarity search/deduplication)
         try:
-            from utils.embeddings import EmbeddingService
-            embedding_service = EmbeddingService()
+            embedding_service = self._get_embedding_service()
             context.output_embedding = embedding_service.encode(llm_output)  # Already returns list
             print(f"    Generated output embedding ({len(context.output_embedding)}-dim)")
         except Exception as e:

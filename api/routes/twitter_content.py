@@ -1,4 +1,5 @@
-"""Twitter Plugin API routes.
+"""
+Twitter Plugin API routes.
 
 Endpoints for generating, viewing, editing, and publishing Twitter content.
 """
@@ -16,6 +17,7 @@ from database.connection import get_db, get_db_session
 from database.models import ContentQueue, Output, Evaluation
 from database.schemas import safe_load_twitter_content
 from services.twitter_publishing_service import TwitterPublishingService
+from utils.timezone import get_ist_now
 
 router = APIRouter(prefix="/twitter", tags=["twitter"])
 
@@ -26,10 +28,10 @@ UTC = ZoneInfo("UTC")
 
 def to_ist_isoformat(dt: Optional[datetime]) -> Optional[str]:
     """
-    Convert database datetime (UTC, timezone-naive) to IST ISO format string.
+    Format database datetime (naive IST) to IST ISO format string.
 
     Args:
-        dt: Datetime from database (UTC, timezone-naive)
+        dt: Datetime from database (naive IST timestamp)
 
     Returns:
         ISO format string with IST timezone (e.g., "2026-01-25T15:28:34+05:30")
@@ -38,12 +40,12 @@ def to_ist_isoformat(dt: Optional[datetime]) -> Optional[str]:
     if dt is None:
         return None
 
-    # Database stores timezone-naive UTC - make it timezone-aware and convert to IST
+    # Database stores naive IST timestamps - just add IST timezone info for display
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
+        dt = dt.replace(tzinfo=IST)
 
-    # Convert to IST and return ISO format (includes +05:30 suffix)
-    return dt.astimezone(IST).isoformat()
+    # Return ISO format (includes +05:30 suffix)
+    return dt.isoformat()
 
 
 class GenerateTwitterContentRequest(BaseModel):
@@ -247,12 +249,12 @@ async def list_twitter_content(
                 except json.JSONDecodeError:
                     pass
 
-            # Convert timezone-naive UTC datetimes to IST for display
+            # Database stores naive IST timestamps - just add IST timezone info for display
             def to_ist_datetime(dt: Optional[datetime]) -> Optional[datetime]:
                 if dt is None:
                     return None
                 if dt.tzinfo is None:
-                    return dt.replace(tzinfo=UTC).astimezone(IST)
+                    return dt.replace(tzinfo=IST)
                 return dt
 
             items.append(TwitterContentItem(
@@ -318,7 +320,7 @@ async def approve_hitl_content(content_queue_id: str):
 
             # Approve: Move to ready_to_schedule
             item.status = "ready_to_schedule"
-            item.updated_at = datetime.utcnow()
+            item.updated_at = get_ist_now()
             db.commit()
 
             print(f"[HITL] Content {content_queue_id} approved by user")
@@ -380,7 +382,7 @@ async def reject_hitl_content(content_queue_id: str, request: RejectHITLRequest 
                 item.error_message = f"Rejected during HITL review: {rejection_reason}"
             else:
                 item.error_message = "Rejected during HITL review"
-            item.updated_at = datetime.utcnow()
+            item.updated_at = get_ist_now()
             db.commit()
 
             print(f"[HITL] Content {content_queue_id} rejected by user")
@@ -731,7 +733,7 @@ async def regenerate_twitter_content(content_queue_id: str):
 
             # 6. Update status to generating
             content_item.status = "generating"
-            content_item.updated_at = datetime.utcnow()
+            content_item.updated_at = get_ist_now()
             db.commit()
 
             # 7. Run Twitter adapters pipeline
@@ -760,7 +762,7 @@ async def regenerate_twitter_content(content_queue_id: str):
                 # Generation failed - mark as failed
                 content_item.status = "failed"
                 content_item.error_message = f"Regeneration failed: {str(gen_error)}"
-                content_item.updated_at = datetime.utcnow()
+                content_item.updated_at = get_ist_now()
                 db.commit()
                 raise HTTPException(
                     status_code=500,
@@ -771,7 +773,7 @@ async def regenerate_twitter_content(content_queue_id: str):
             if not context.twitter_content:
                 content_item.status = "failed"
                 content_item.error_message = "Regeneration failed: No content generated"
-                content_item.updated_at = datetime.utcnow()
+                content_item.updated_at = get_ist_now()
                 db.commit()
                 raise HTTPException(
                     status_code=500,
@@ -821,7 +823,7 @@ async def regenerate_twitter_content(content_queue_id: str):
             content_item.status = new_status
             content_item.edited_content = None  # Clear any previous edits
             content_item.error_message = None
-            content_item.updated_at = datetime.utcnow()
+            content_item.updated_at = get_ist_now()
 
             # Store clarity issues if any
             if context.twitter_clarity_issues:

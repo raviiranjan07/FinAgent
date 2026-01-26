@@ -14,6 +14,7 @@ from config.settings import (
     DEDUP_LOOKBACK_HOURS
 )
 from utils.embeddings import EmbeddingService
+from utils.timezone import get_ist_now
 
 
 class DeduplicationAdapter(BaseAdapter):
@@ -27,7 +28,7 @@ class DeduplicationAdapter(BaseAdapter):
     """
 
     name = "dedup_adapter"
-    version = "1.1.0"
+    version = "1.2.0"  # Fixed: Load from database when DATABASE_ENABLED=true
     input_keys = ["event.url", "event.title", "event_embedding"]
     output_keys = ["dedup"]
 
@@ -39,18 +40,85 @@ class DeduplicationAdapter(BaseAdapter):
         self._loaded = False
 
     def _load_processed_data(self):
-        """Load URLs and recent events from log file."""
+        """Load URLs and recent events from database (if enabled) or log file."""
         if self._loaded:
             return
 
         self._processed_urls = set()
         self._recent_events = []
 
+        cutoff_time = get_ist_now() - timedelta(hours=DEDUP_LOOKBACK_HOURS)
+
+        # Try database first if enabled
+        db_enabled = os.getenv("DATABASE_ENABLED", "false").lower() == "true"
+
+        if db_enabled:
+            try:
+                self._load_from_database(cutoff_time)
+                self._loaded = True
+                return
+            except Exception as e:
+                print(f"  [Dedup] Database loading failed: {e}, falling back to log file")
+
+        # Fallback to log file
+        self._load_from_log_file(cutoff_time)
+        self._loaded = True
+
+    def _load_from_database(self, cutoff_time: datetime):
+        """Load URLs and recent events from PostgreSQL database."""
+        from database.connection import SessionLocal
+        from database.models import Event as DBEvent
+
+        session = SessionLocal()
+        try:
+            # Load all URLs
+            urls = session.query(DBEvent.link).filter(DBEvent.link.isnot(None)).all()
+            self._processed_urls = {url[0] for url in urls if url[0]}
+
+            # Convert to naive datetime for database comparison
+            # PostgreSQL stores naive UTC timestamps by default
+            cutoff_naive = cutoff_time.replace(tzinfo=None) if cutoff_time.tzinfo else cutoff_time
+
+            # Load recent events with embeddings for semantic comparison
+            recent_events = (
+                session.query(DBEvent)
+                .filter(
+                    DBEvent.created_at >= cutoff_naive,
+                    DBEvent.embedding.isnot(None)
+                )
+                .all()
+            )
+
+            for event in recent_events:
+                # Convert pgvector to list if needed
+                embedding = event.embedding
+                if embedding is not None:
+                    if hasattr(embedding, 'tolist'):
+                        embedding = embedding.tolist()
+                    elif not isinstance(embedding, list):
+                        embedding = list(embedding)
+
+                self._recent_events.append({
+                    "event_id": event.event_id,
+                    "title": event.title,
+                    "embedding": embedding,
+                    "timestamp": event.created_at
+                })
+
+            print(f"  Dedup loaded from DB: {len(self._processed_urls)} URLs, {len(self._recent_events)} recent events")
+
+        finally:
+            session.close()
+
+    def _load_from_log_file(self, cutoff_time: datetime):
+        """Load URLs and recent events from JSONL log file."""
         if not os.path.exists(EVENTS_LOG_FILE):
-            self._loaded = True
+            print(f"  Dedup: No log file found, starting fresh")
             return
 
-        cutoff_time = datetime.utcnow() - timedelta(hours=DEDUP_LOOKBACK_HOURS)
+        # Convert to naive datetime for comparison with log file timestamps
+        # Log files use UTC naive timestamps historically
+        cutoff_naive = cutoff_time.replace(tzinfo=None) if cutoff_time.tzinfo else cutoff_time
 
         with open(EVENTS_LOG_FILE, "r", encoding="utf-8") as f:
             for line in f:
@@ -68,7 +136,9 @@ class DeduplicationAdapter(BaseAdapter):
                     if timestamp_str:
                         try:
                             timestamp = datetime.fromisoformat(timestamp_str)
-                            if timestamp > cutoff_time:
+                            # Strip timezone for comparison if present
+                            timestamp_naive = timestamp.replace(tzinfo=None) if timestamp.tzinfo else timestamp
+                            if timestamp_naive > cutoff_naive:
                                 self._recent_events.append({
                                     "event_id": record.get("event_id"),
                                     "title": record.get("title", ""),
@@ -81,8 +151,7 @@ class DeduplicationAdapter(BaseAdapter):
                 except json.JSONDecodeError:
                     continue
 
-        self._loaded = True
-        print(f"  Dedup loaded: {len(self._processed_urls)} URLs, {len(self._recent_events)} recent events")
+        print(f"  Dedup loaded from log: {len(self._processed_urls)} URLs, {len(self._recent_events)} recent events")
 
     def _get_embedding_service(self) -> EmbeddingService:
         """Lazy load embedding service (fallback if EmbeddingAdapter not used)."""

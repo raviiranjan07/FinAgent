@@ -3,6 +3,7 @@
 import time
 import requests
 import threading
+import sys
 from typing import Optional
 from groq import Groq
 from config.settings import (
@@ -21,6 +22,15 @@ from config.settings import (
     LLM_ENABLE_OLLAMA_FALLBACK,
 )
 from services.quota_manager import get_quota_manager
+
+
+def safe_print(msg: str) -> None:
+    """Print message safely, handling Unicode encoding issues on Windows."""
+    try:
+        print(msg)
+    except UnicodeEncodeError:
+        # Replace problematic characters with '?' for Windows console
+        print(msg.encode('ascii', errors='replace').decode('ascii'))
 
 
 class LLMService:
@@ -146,7 +156,7 @@ class LLMService:
         # Log if cleaning removed content
         if len(text) < original_length:
             removed = original_length - len(text)
-            print(f"    [LLM-Clean] Removed {removed} chars of model artifacts ({original_length} → {len(text)})")
+            print(f"    [LLM-Clean] Removed {removed} chars of model artifacts ({original_length} -> {len(text)})")
 
         return text
 
@@ -211,8 +221,8 @@ class LLMService:
                     # Check for specific quota type in error details
                     # Gemini returns: "GenerateContentRequestsPerMinute-FreeTier" or "GenerateContentRequestsPerDay-FreeTier"
                     if 'generatecontentrequestsperminute' in error_message or 'requestsperminute' in error_message:
-                        print(f"    [QuotaDetect] ✓ RPM quota hit (15 requests/minute)")
-                        print(f"    [QuotaDetect] → Reset in 60 seconds")
+                        print(f"    [QuotaDetect] OK: RPM quota hit (15 requests/minute)")
+                        print(f"    [QuotaDetect] -> Reset in 60 seconds")
                         return 0.017  # 60 seconds = 0.0167 hours
 
                     if 'generatecontentrequestsperday' in error_message or 'requestsperday' in error_message:
@@ -228,8 +238,8 @@ class LLMService:
                             next_reset_utc += timedelta(days=1)
 
                         hours_until_reset = (next_reset_utc - now_utc).total_seconds() / 3600.0
-                        print(f"    [QuotaDetect] ✓ RPD quota hit (1500 requests/day)")
-                        print(f"    [QuotaDetect] → Reset at {next_reset_utc.strftime('%Y-%m-%d %H:%M UTC')} ({hours_until_reset:.1f}h)")
+                        print(f"    [QuotaDetect] OK: RPD quota hit (1500 requests/day)")
+                        print(f"    [QuotaDetect] -> Reset at {next_reset_utc.strftime('%Y-%m-%d %H:%M UTC')} ({hours_until_reset:.1f}h)")
                         return hours_until_reset
 
                     # STEP 2: CHECK FOR retryDelay FIELD
@@ -242,11 +252,11 @@ class LLMService:
                             if retry_delay_str.endswith('s'):
                                 retry_seconds = int(retry_delay_str[:-1])
                                 retry_hours = retry_seconds / 3600.0
-                                print(f"    [QuotaDetect] ✓ retryDelay: {retry_delay_str} ({retry_hours:.2f}h)")
+                                print(f"    [QuotaDetect] OK: retryDelay: {retry_delay_str} ({retry_hours:.2f}h)")
                                 return max(retry_hours, 0.017)
                             elif retry_delay_str.endswith('h'):
                                 retry_hours = float(retry_delay_str[:-1])
-                                print(f"    [QuotaDetect] ✓ retryDelay: {retry_delay_str}")
+                                print(f"    [QuotaDetect] OK: retryDelay: {retry_delay_str}")
                                 return retry_hours
 
                 except (json.JSONDecodeError, KeyError, ValueError) as e:
@@ -269,7 +279,7 @@ class LLMService:
                     try:
                         retry_seconds = int(retry_after)
                         retry_hours = retry_seconds / 3600.0
-                        print(f"    [QuotaDetect] ✓ Retry-After header: {retry_seconds}s ({retry_hours:.2f}h)")
+                        print(f"    [QuotaDetect] OK: Retry-After header: {retry_seconds}s ({retry_hours:.2f}h)")
                         return max(retry_hours, 0.017)
                     except ValueError:
                         pass
@@ -279,7 +289,7 @@ class LLMService:
                 response_text = response.text.lower()
 
                 if 'minute' in response_text or 'rpm' in response_text:
-                    print(f"    [QuotaDetect] ✓ Keyword: MINUTE quota (15 RPM)")
+                    print(f"    [QuotaDetect] OK: Keyword: MINUTE quota (15 RPM)")
                     return 0.017
 
                 if 'day' in response_text or 'daily' in response_text or 'rpd' in response_text:
@@ -289,7 +299,7 @@ class LLMService:
                     if now_utc.hour >= 8:
                         next_reset_utc += timedelta(days=1)
                     hours_until_reset = (next_reset_utc - now_utc).total_seconds() / 3600.0
-                    print(f"    [QuotaDetect] ✓ Keyword: DAY quota (1500 RPD) → reset in {hours_until_reset:.1f}h")
+                    print(f"    [QuotaDetect] OK: Keyword: DAY quota (1500 RPD) - reset in {hours_until_reset:.1f}h")
                     return hours_until_reset
 
             # STEP 5: HEURISTIC - DEFAULT TO RPM (CONSERVATIVE)
@@ -304,8 +314,8 @@ class LLMService:
             # - Safer to assume short reset (1 min) than long reset (24 hours)
             # - If it's really RPD, we'll get 429 again after 1 minute and can retry
 
-            print(f"    [QuotaDetect] ⚠️ No explicit quota type found - defaulting to RPM (safer)")
-            print(f"    [QuotaDetect] → Reset in 60 seconds (will retry after)")
+            print(f"    [QuotaDetect] WARNING: No explicit quota type found - defaulting to RPM (safer)")
+            print(f"    [QuotaDetect] -> Reset in 60 seconds (will retry after)")
             return 0.017  # 1 minute reset - conservative default
 
         except Exception as e:
@@ -314,7 +324,7 @@ class LLMService:
         # Final fallback: DEFAULT TO RPM (CONSERVATIVE)
         # If all detection methods fail, assume short reset (1 minute) rather than long reset (24 hours)
         # This prevents incorrectly marking API as exhausted for a full day due to detection failures
-        print(f"    [QuotaDetect] ⚠️ All detection methods failed - defaulting to RPM (1 minute)")
+        print(f"    [QuotaDetect] WARNING: All detection methods failed - defaulting to RPM (1 minute)")
         return 0.017  # 1 minute reset
 
     def generate(self, prompt: str, stream: bool = False) -> str:
@@ -585,7 +595,7 @@ class LLMService:
                     time.sleep(delay)
             except (KeyError, ValueError) as e:
                 last_error = e
-                print(f"    [Gemini] Response parsing error: {e}")
+                safe_print(f"    [Gemini] Response parsing error: {e}")
                 if attempt < self.max_retries - 1:
                     delay = LLM_RETRY_DELAY * (2 ** attempt)
                     print(f"    Retrying in {delay}s...")
@@ -602,7 +612,7 @@ class LLMService:
             self.quota_manager.mark_exhausted(self.mode, reset_hours=reset_hours)
 
         error_msg = f"Gemini fallback failed after {self.max_retries} attempts: {last_error}"
-        print(f"    {error_msg}")
+        safe_print(f"    {error_msg}")
         raise Exception(error_msg)
 
     def _generate_gemini(self, prompt: str) -> str:
@@ -696,7 +706,7 @@ class LLMService:
                     time.sleep(delay)
             except (KeyError, ValueError) as e:
                 last_error = e
-                print(f"    [Gemini] Response parsing error: {e}")
+                safe_print(f"    [Gemini] Response parsing error: {e}")
                 if attempt < self.max_retries - 1:
                     delay = LLM_RETRY_DELAY * (2 ** attempt)
                     print(f"    Retrying in {delay}s...")
@@ -718,7 +728,7 @@ class LLMService:
                 try:
                     return self._generate_groq_fallback(prompt)
                 except Exception as groq_error:
-                    print(f"    [X] Groq fallback failed: {groq_error}")
+                    safe_print(f"    [X] Groq fallback failed: {groq_error}")
 
                     # If Groq fails, try Ollama as final fallback
                     if LLM_ENABLE_OLLAMA_FALLBACK:
@@ -726,7 +736,7 @@ class LLMService:
                         try:
                             return self._generate_ollama_fallback(prompt, stream=False)
                         except Exception as ollama_error:
-                            print(f"    [X] Ollama fallback also failed: {ollama_error}")
+                            safe_print(f"    [X] Ollama fallback also failed: {ollama_error}")
                             print(f"    [i] Make sure Ollama is running: ollama serve")
                             error_msg = f"All LLM services failed: Gemini (rate limit), Groq ({groq_error}), Ollama ({ollama_error})"
                             raise Exception(error_msg)
@@ -741,7 +751,7 @@ class LLMService:
                 try:
                     return self._generate_ollama_fallback(prompt, stream=False)
                 except Exception as ollama_error:
-                    print(f"    [X] Ollama fallback also failed: {ollama_error}")
+                    safe_print(f"    [X] Ollama fallback also failed: {ollama_error}")
                     print(f"    [i] Make sure Ollama is running: ollama serve")
                     error_msg = f"Both Gemini (rate limit) and Ollama (fallback) failed. Ollama error: {ollama_error}"
                     raise Exception(error_msg)
@@ -754,14 +764,14 @@ class LLMService:
                 try:
                     return self._generate_ollama_fallback(prompt, stream=False)
                 except Exception as ollama_error:
-                    print(f"    [X] Ollama fallback also failed: {ollama_error}")
+                    safe_print(f"    [X] Ollama fallback also failed: {ollama_error}")
                     print(f"    [i] Make sure Ollama is running: ollama serve")
                     error_msg = f"Both Gemini and Ollama failed. Gemini: {last_error}, Ollama: {ollama_error}"
                     raise Exception(error_msg)
 
         # No fallback enabled
         error_msg = f"Gemini generation failed after {self.max_retries} attempts: {last_error}"
-        print(f"    {error_msg}")
+        safe_print(f"    {error_msg}")
         raise Exception(error_msg)
 
     def _generate_groq(self, prompt: str) -> str:
@@ -841,7 +851,7 @@ class LLMService:
                 try:
                     return self._generate_gemini_fallback(prompt)
                 except Exception as gemini_error:
-                    print(f"    [X] Gemini fallback failed: {gemini_error}")
+                    safe_print(f"    [X] Gemini fallback failed: {gemini_error}")
 
                     # If Gemini fails, try Ollama as final fallback
                     if LLM_ENABLE_OLLAMA_FALLBACK:
@@ -849,7 +859,7 @@ class LLMService:
                         try:
                             return self._generate_ollama_fallback(prompt, stream=False)
                         except Exception as ollama_error:
-                            print(f"    [X] Ollama fallback also failed: {ollama_error}")
+                            safe_print(f"    [X] Ollama fallback also failed: {ollama_error}")
                             print(f"    [i] Make sure Ollama is running: ollama serve")
                             error_msg = f"All LLM services failed: Groq (rate limit), Gemini ({gemini_error}), Ollama ({ollama_error})"
                             raise Exception(error_msg)
@@ -864,14 +874,14 @@ class LLMService:
                 try:
                     return self._generate_ollama_fallback(prompt, stream=False)
                 except Exception as ollama_error:
-                    print(f"    [X] Ollama fallback also failed: {ollama_error}")
+                    safe_print(f"    [X] Ollama fallback also failed: {ollama_error}")
                     print(f"    [i] Make sure Ollama is running: ollama serve")
                     error_msg = f"Both Groq (rate limit) and Ollama (fallback) failed. Ollama error: {ollama_error}"
                     raise Exception(error_msg)
 
         # No fallback or not a rate limit error - raise original error
         error_msg = f"Groq generation failed after {self.max_retries} attempts: {last_error}"
-        print(f"    {error_msg}")
+        safe_print(f"    {error_msg}")
         raise Exception(error_msg)
 
 

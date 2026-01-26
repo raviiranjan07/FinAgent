@@ -38,7 +38,8 @@ class FormatDecisionAdapter:
         content_length = len(context.llm_output) if context.llm_output else 0
 
         # Priority 1: Event type rules
-        if event_type in ["FINANCE_POLICY", "MACRO_ECONOMIC"]:
+        # Educational event types that benefit from thread format
+        if event_type in ["FINANCE_POLICY", "MACRO_ECONOMIC", "DIGITAL_ASSETS"]:
             decision = {
                 "format": "THREAD",
                 "reason": f"{event_type} events need structured explanation"

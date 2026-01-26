@@ -9,6 +9,7 @@ from pathlib import Path
 
 from config import settings
 from services.quota_manager import get_quota_manager
+from utils.timezone import get_ist_now
 
 router = APIRouter()
 
@@ -65,7 +66,7 @@ def get_system_status():
         llm_mode_configured=configured_mode,
         llm_mode_active=active_mode,
         quota_status=quota_status,
-        timestamp=datetime.utcnow().isoformat()
+        timestamp=get_ist_now().isoformat()
     )
 
 
@@ -272,3 +273,128 @@ def health_check_quota(api: str, authorization: Optional[str] = Header(None)):
             )
     else:
         raise HTTPException(status_code=400, detail=f"Invalid API: {api}. Must be 'groq', 'gemini', or 'all'")
+
+
+# =============================================================================
+# Ingestion Worker Endpoints
+# =============================================================================
+
+@router.get("/api/system/ingestion/health")
+def get_ingestion_worker_health():
+    """
+    Check RSS ingestion worker health status.
+
+    This endpoint:
+    - Reads worker heartbeat file
+    - Determines if worker is alive (heartbeat within last interval + 5 minutes)
+    - Returns worker stats (events processed, success count, last run time)
+
+    Returns:
+        Worker health status with metrics
+    """
+    from datetime import timedelta
+
+    HEARTBEAT_FILE = os.getenv("INGESTION_HEARTBEAT_FILE", "/tmp/rss_ingestion_worker_heartbeat.txt")
+    INGESTION_INTERVAL_HOURS = float(os.getenv("INGESTION_INTERVAL_HOURS", 4))
+
+    # Check if heartbeat file exists
+    if not os.path.exists(HEARTBEAT_FILE):
+        return {
+            "is_alive": False,
+            "status": "offline",
+            "message": "Worker has never started (no heartbeat file)",
+            "heartbeat_file": HEARTBEAT_FILE
+        }
+
+    # Read heartbeat file
+    try:
+        with open(HEARTBEAT_FILE, 'r') as f:
+            lines = f.readlines()
+
+        if not lines:
+            return {
+                "is_alive": False,
+                "status": "offline",
+                "message": "Heartbeat file is empty"
+            }
+
+        # Parse heartbeat data
+        heartbeat_data = {}
+        last_heartbeat_str = lines[0].strip()
+        last_heartbeat = datetime.fromisoformat(last_heartbeat_str)
+
+        for line in lines[1:]:
+            if ':' in line:
+                key, value = line.strip().split(':', 1)
+                heartbeat_data[key.strip()] = value.strip()
+
+        # Determine if worker is alive
+        # Worker should update heartbeat after each run or during idle
+        # Allow interval + 5 minutes grace period
+        now = get_ist_now()
+        max_gap = timedelta(hours=INGESTION_INTERVAL_HOURS, minutes=5)
+        time_since_heartbeat = now - last_heartbeat
+        is_alive = time_since_heartbeat < max_gap
+
+        # Get status from heartbeat
+        worker_status = heartbeat_data.get('status', 'unknown')
+
+        return {
+            "is_alive": is_alive,
+            "status": "active" if is_alive else "stale",
+            "worker_status": worker_status,
+            "last_heartbeat": last_heartbeat.isoformat(),
+            "time_since_heartbeat_seconds": int(time_since_heartbeat.total_seconds()),
+            "success_count": int(heartbeat_data.get('success_count', 0)),
+            "failure_count": int(heartbeat_data.get('failure_count', 0)),
+            "events_processed": int(heartbeat_data.get('events_processed', 0)),
+            "last_run_time": heartbeat_data.get('last_run_time'),
+            "last_error": heartbeat_data.get('last_error'),
+            "interval_hours": INGESTION_INTERVAL_HOURS
+        }
+
+    except Exception as e:
+        return {
+            "is_alive": False,
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@router.post("/api/system/ingestion/trigger", response_model=OperationResponse)
+def trigger_ingestion(authorization: Optional[str] = Header(None)):
+    """
+    Manually trigger RSS ingestion pipeline.
+
+    Runs the pipeline in a background subprocess. Does not wait for completion.
+
+    Requires admin authentication via Authorization header.
+
+    Usage:
+        Authorization: Bearer <ADMIN_TOKEN>
+    """
+    import subprocess
+    import sys as system_module
+    import threading
+
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+
+    if not verify_admin_token(token):
+        raise HTTPException(status_code=401, detail="Unauthorized - Invalid or missing admin token")
+
+    # Run pipeline in background thread
+    def run_pipeline_subprocess():
+        subprocess.run([
+            system_module.executable,
+            "run_pipeline.py"
+        ])
+
+    thread = threading.Thread(target=run_pipeline_subprocess, daemon=True)
+    thread.start()
+
+    return OperationResponse(
+        message="RSS ingestion pipeline triggered. Running in background.",
+        requires_restart=False
+    )

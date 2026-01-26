@@ -46,8 +46,8 @@ export function Stats() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Statistics</h1>
-        <p className="text-gray-500 mt-1">Detailed analytics and HITL progress</p>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Statistics</h1>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">Detailed analytics and HITL progress</p>
       </div>
 
       {/* Publishing Analytics */}
@@ -64,7 +64,7 @@ export function Stats() {
             <select
               value={publishingDays}
               onChange={(e) => setPublishingDays(Number(e.target.value))}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value={7}>Last 7 days</option>
               <option value={15}>Last 15 days</option>
@@ -127,8 +127,9 @@ export function Stats() {
                     dataKey="date"
                     className="text-xs"
                     tickFormatter={(value) => {
-                      const date = new Date(value)
-                      return date.getDate().toString()
+                      // Parse YYYY-MM-DD directly to avoid timezone issues
+                      const parts = value.split("-")
+                      return parseInt(parts[2], 10).toString() // Return day number
                     }}
                     label={{ value: "Days", position: "insideBottom", offset: -5 }}
                   />
@@ -145,9 +146,13 @@ export function Stats() {
                       borderRadius: "8px",
                     }}
                     labelFormatter={(value) => {
-                      const date = new Date(value)
+                      // Parse YYYY-MM-DD directly to avoid timezone issues
+                      const parts = value.split("-")
                       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-                      return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`
+                      const monthIndex = parseInt(parts[1], 10) - 1
+                      const day = parseInt(parts[2], 10)
+                      const year = parts[0]
+                      return `${months[monthIndex]} ${day}, ${year} (IST)`
                     }}
                     formatter={(value: any, name: string) => {
                       const displayName = name === "Single Posts" ? "Single" : "Thread"

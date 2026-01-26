@@ -153,6 +153,7 @@ export interface GeneratedContentItem {
   output_id: string
   content_queue_id: string
   platform: string
+  format: "SINGLE" | "THREAD"  // Tweet format
   content_text: string | null
   edited_content: string | null
   hashtags: string[]
@@ -548,6 +549,12 @@ export const schedulingApi = {
   getHealth: () =>
     api
       .get<WorkerHealth>("/scheduling/health")
+      .then((r) => r.data),
+
+  // Reset published content for republishing
+  resetForRepublish: (contentQueueId: string) =>
+    api
+      .post(`/scheduling/reset-for-republish/${contentQueueId}`)
       .then((r) => r.data),
 }
 

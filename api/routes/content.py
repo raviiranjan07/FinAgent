@@ -13,6 +13,7 @@ from datetime import datetime
 from database.connection import get_db_session
 from database.models import GeneratedContent, ContentQueue, Output, Event
 from api.validators import ContentValidator
+from utils.timezone import get_ist_now
 
 router = APIRouter(prefix="/content", tags=["content"])
 
@@ -23,6 +24,7 @@ class GeneratedContentItem(BaseModel):
     output_id: str
     content_queue_id: str
     platform: str
+    format: Optional[str] = "SINGLE"  # SINGLE or THREAD
     content_text: Optional[str] = None
     edited_content: Optional[str] = None
     hashtags: List[str]
@@ -104,17 +106,19 @@ async def get_generated_content(limit: int = 50, offset: int = 0):
 
             # Determine if content is edited and published
             is_edited = bool(queue_item.edited_content)
-            is_published = bool(queue_item.platform_post_id or queue_item.published_at)
+            is_published = bool(queue_item.twitter_post_id or queue_item.published_at)
 
             items.append(GeneratedContentItem(
                 id=str(gen_content.id) if gen_content else str(queue_item.id),
                 output_id=str(queue_item.output_id),
                 content_queue_id=str(queue_item.id),
                 platform=queue_item.platform or "twitter",
-                content_text=gen_content.content_text if gen_content else None,
+                format=queue_item.format or "SINGLE",  # SINGLE or THREAD
+                # Use queue_item.content_text for actual tweet/thread content (JSON for threads)
+                content_text=queue_item.content_text,
                 edited_content=queue_item.edited_content,
                 hashtags=gen_content.hashtags if gen_content else [],
-                character_count=gen_content.character_count if gen_content else 0,
+                character_count=len(queue_item.content_text) if queue_item.content_text else 0,
                 edited_character_count=len(queue_item.edited_content) if queue_item.edited_content else 0,
                 is_edited=is_edited,
                 is_published=is_published,
@@ -156,7 +160,7 @@ async def edit_content(content_queue_id: str, request: EditContentRequest):
                 raise HTTPException(status_code=404, detail="Content not found")
 
             # 2. Check if already published
-            if queue_item.platform_post_id or queue_item.published_at:
+            if queue_item.twitter_post_id or queue_item.published_at:
                 raise HTTPException(
                     status_code=409,
                     detail={
@@ -173,14 +177,22 @@ async def edit_content(content_queue_id: str, request: EditContentRequest):
                     status_code=400,
                     detail={
                         "error": "validation_failed",
-                        "issues": [issue.dict() for issue in validation.issues]
+                        "issues": [issue.model_dump() for issue in validation.issues]
                     }
                 )
 
             # 4. Save edited content
             queue_item.edited_content = request.edited_content
-            queue_item.updated_at = datetime.utcnow()
+            queue_item.updated_at = get_ist_now()
             db.commit()
+
+            # Refresh to ensure we have the committed data
+            db.refresh(queue_item)
+
+            # Debug logging
+            print(f"[Edit] Saved edited_content for queue_item {queue_item.id}")
+            print(f"[Edit] Content length: {len(queue_item.edited_content)} chars")
+            print(f"[Edit] First 100 chars: {queue_item.edited_content[:100]}...")
 
             # 5. Get the generated content for content_text
             gen_content = (
@@ -243,8 +255,8 @@ async def mark_as_published(content_queue_id: str):
 
             # Update status and timestamp
             queue_item.status = "published"
-            queue_item.published_at = datetime.utcnow()
-            queue_item.updated_at = datetime.utcnow()
+            queue_item.published_at = get_ist_now()
+            queue_item.updated_at = get_ist_now()
             db.commit()
 
             return {

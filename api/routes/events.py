@@ -2,13 +2,18 @@
 
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import desc, asc
 
 from database.connection import get_db_session
 from database.repository import RepositoryManager
+from database.models import Event as DBEvent, Output, Evaluation
 from api.schemas.schemas import EventResponse, EventListResponse
 
 router = APIRouter()
+
+# Whitelist of allowed sort fields (security: prevents arbitrary attribute access)
+ALLOWED_SORT_FIELDS = {"published_at", "created_at", "source", "title"}
 
 
 def get_repo():
@@ -25,27 +30,36 @@ async def list_events(
     sort_by: str = Query("published_at", description="Sort by field (published_at, created_at)"),
     sort_order: str = Query("desc", description="Sort order (asc, desc)"),
 ):
-    """List events with pagination and sorting."""
-    from database.models import Event as DBEvent
-    from sqlalchemy import desc, asc
+    """
+    List events with pagination and sorting.
 
+    Performance: Uses joinedload to fetch related data in 1-2 queries
+    instead of N+1 queries.
+    """
     with get_db_session() as db:
-        # Build query
-        query = db.query(DBEvent)
+        # Build query with eager loading (prevents N+1 queries)
+        query = (
+            db.query(DBEvent)
+            .options(
+                joinedload(DBEvent.outputs).joinedload(Output.evaluations)
+            )
+        )
 
         # Apply source filter
         if source:
             query = query.filter(DBEvent.source == source)
 
-        # Apply sorting
+        # Apply sorting (with whitelist validation)
+        if sort_by not in ALLOWED_SORT_FIELDS:
+            sort_by = "published_at"
         sort_field = getattr(DBEvent, sort_by, DBEvent.published_at)
         if sort_order == "desc":
             query = query.order_by(desc(sort_field))
         else:
             query = query.order_by(asc(sort_field))
 
-        # Get total count
-        total = query.count()
+        # Get total count (without eager loading for performance)
+        total = db.query(DBEvent).filter(DBEvent.source == source if source else True).count()
 
         # Apply pagination
         events = query.offset((page - 1) * page_size).limit(page_size).all()
@@ -53,7 +67,7 @@ async def list_events(
         # Calculate pagination metadata
         total_pages = (total + page_size - 1) // page_size
 
-        # Convert to response
+        # Convert to response (no additional queries - data already loaded)
         items = []
         for event in events:
             has_output = len(event.outputs) > 0 if event.outputs else False

@@ -10,6 +10,7 @@ from database.connection import get_db_session
 from database.models import Output, Evaluation, Event
 from services.auto_approval_service import AutoApprovalService
 from api.websocket import manager
+from utils.timezone import get_ist_now
 
 router = APIRouter()
 
@@ -225,7 +226,7 @@ async def refresh_confidence_cache():
                 GROUP BY o.event_type
             """)
 
-            db.execute(event_type_query, {"now": datetime.utcnow()})
+            db.execute(event_type_query, {"now": get_ist_now()})
 
             # Recalculate intent pass rates
             intent_query = text("""
@@ -243,7 +244,7 @@ async def refresh_confidence_cache():
                 GROUP BY o.intent
             """)
 
-            db.execute(intent_query, {"now": datetime.utcnow()})
+            db.execute(intent_query, {"now": get_ist_now()})
 
             # Recalculate source pass rates
             source_query = text("""
@@ -262,7 +263,7 @@ async def refresh_confidence_cache():
                 GROUP BY ev.source
             """)
 
-            db.execute(source_query, {"now": datetime.utcnow()})
+            db.execute(source_query, {"now": get_ist_now()})
 
             db.commit()
 
@@ -274,7 +275,7 @@ async def refresh_confidence_cache():
                 "success": True,
                 "message": "Confidence cache refreshed successfully",
                 "cache_entries": cache_count,
-                "refreshed_at": datetime.utcnow().isoformat()
+                "refreshed_at": get_ist_now().isoformat()
             }
 
         except Exception as e:
