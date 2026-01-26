@@ -32,6 +32,11 @@ wheels/
 .vscode/
 *.swp
 *.swo
+.claude/settings.local.json
+
+# Runtime/cache files
+.quota_status.json
+api/.quota_status.json
 
 
 # Environment variables
