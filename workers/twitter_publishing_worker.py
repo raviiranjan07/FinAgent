@@ -17,6 +17,7 @@ Runs every 60 seconds and processes:
 import sys
 import os
 import time
+import tempfile
 from datetime import datetime, timedelta
 from typing import List
 from pathlib import Path
@@ -37,11 +38,12 @@ from services.twitter_publishing_service import TwitterPublishingService
 from config.settings import TWITTER_PUBLISHING_ENABLED
 from utils.timezone import get_ist_now
 
-# Worker configuration
+# Worker configuration - use system temp dir for cross-platform compatibility
+TEMP_DIR = tempfile.gettempdir()
 WORKER_CHECK_INTERVAL = int(os.getenv("WORKER_CHECK_INTERVAL", 60))  # seconds
 WORKER_MAX_RETRIES = int(os.getenv("WORKER_MAX_RETRIES", 3))
-WORKER_LOCK_FILE = os.getenv("WORKER_LOCK_FILE", "/tmp/twitter_worker.lock")
-WORKER_HEARTBEAT_FILE = os.getenv("WORKER_HEARTBEAT_FILE", "/tmp/twitter_worker_heartbeat.txt")
+WORKER_LOCK_FILE = os.getenv("WORKER_LOCK_FILE", os.path.join(TEMP_DIR, "twitter_worker.lock"))
+WORKER_HEARTBEAT_FILE = os.getenv("WORKER_HEARTBEAT_FILE", os.path.join(TEMP_DIR, "twitter_worker_heartbeat.txt"))
 
 
 class TwitterPublishingWorker:
