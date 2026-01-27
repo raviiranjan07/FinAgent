@@ -1,0 +1,32 @@
+{
+  "index_to_label": {
+    "0": "DIGITAL_ASSETS",
+    "1": "FINANCE_POLICY",
+    "2": "GEO_FINANCIAL",
+    "3": "MACRO_ECONOMIC",
+    "4": "MARKET_INFRASTRUCTURE",
+    "5": "MARKET_MOVEMENT",
+    "6": "NON_FINANCE",
+    "7": "SKIP"
+  },
+  "label_to_index": {
+    "DIGITAL_ASSETS": "0",
+    "FINANCE_POLICY": "1",
+    "GEO_FINANCIAL": "2",
+    "MACRO_ECONOMIC": "3",
+    "MARKET_INFRASTRUCTURE": "4",
+    "MARKET_MOVEMENT": "5",
+    "NON_FINANCE": "6",
+    "SKIP": "7"
+  },
+  "classes": [
+    "DIGITAL_ASSETS",
+    "FINANCE_POLICY",
+    "GEO_FINANCIAL",
+    "MACRO_ECONOMIC",
+    "MARKET_INFRASTRUCTURE",
+    "MARKET_MOVEMENT",
+    "NON_FINANCE",
+    "SKIP"
+  ]
+}

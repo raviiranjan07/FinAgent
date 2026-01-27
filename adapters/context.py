@@ -41,6 +41,9 @@ class ExecutionContext(BaseModel):
     """
     event: Event
     event_type: Optional[str] = None
+    event_type_confidence: Optional[float] = None  # ML classifier confidence (0-1)
+    secondary_event_type: Optional[str] = None  # Secondary category if multi-label
+    secondary_event_type_confidence: Optional[float] = None  # Secondary label confidence
     intent: Optional[str] = None
     llm_output: Optional[str] = None
     llm_model: Optional[str] = None  # LLM model name that generated the output
@@ -50,7 +53,8 @@ class ExecutionContext(BaseModel):
     dedup: Optional[DedupResult] = None  # Deduplication result
 
     # Embeddings (Pre-MVP)
-    event_embedding: Optional[List[float]] = None  # 384-dim vector for event
+    embedding: Optional[List[float]] = None  # 384-dim vector for event (used by ML classifier)
+    event_embedding: Optional[List[float]] = None  # Alias for embedding (legacy)
     output_embedding: Optional[List[float]] = None  # 384-dim vector for output
 
     # Database IDs (Pre-MVP)

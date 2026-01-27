@@ -34,7 +34,11 @@ from utils.timezone import get_ist_now
 TEMP_DIR = tempfile.gettempdir()
 RSS_INTERVAL_HOURS = int(os.getenv("INGESTION_INTERVAL_HOURS", 4))
 TWITTER_INTERVAL_SECONDS = int(os.getenv("WORKER_CHECK_INTERVAL", 60))
+
+# Lock files - Combined worker acquires ALL locks to prevent conflicts
 COMBINED_LOCK_FILE = os.path.join(TEMP_DIR, "finagent_combined_worker.lock")
+RSS_LOCK_FILE = os.path.join(TEMP_DIR, "rss_ingestion_worker.lock")
+TWITTER_LOCK_FILE = os.path.join(TEMP_DIR, "twitter_worker.lock")
 COMBINED_HEARTBEAT_FILE = os.path.join(TEMP_DIR, "finagent_combined_worker_heartbeat.txt")
 
 
@@ -120,12 +124,12 @@ class CombinedWorker:
             max_instances=1
         )
 
-        # Run initial tasks
-        print("[Combined] Running initial RSS ingestion...")
-        self.run_rss_task()
-
+        # Run initial tasks (Twitter first - quick, RSS second - slow)
         print("[Combined] Running initial Twitter publishing check...")
         self.run_twitter_task()
+
+        print("[Combined] Running initial RSS ingestion...")
+        self.run_rss_task()
 
         print(f"\n[Combined] Scheduler started. Waiting for next tasks...")
 
@@ -185,27 +189,68 @@ def main():
 
     worker = CombinedWorker()
 
-    # Handle --once flags
-    if args.once:
-        worker.run_once(rss=True, twitter=True)
+    # Handle --once flags (with lock check unless --no-lock)
+    if args.once or args.rss_once or args.twitter_once:
+        run_rss = args.once or args.rss_once
+        run_twitter = args.once or args.twitter_once
+
+        if not args.no_lock:
+            # Check locks even for --once mode to prevent conflicts
+            locks_to_check = []
+            if run_rss:
+                locks_to_check.append(("RSS", RSS_LOCK_FILE))
+            if run_twitter:
+                locks_to_check.append(("Twitter", TWITTER_LOCK_FILE))
+
+            for name, lock_file in locks_to_check:
+                try:
+                    test_lock = FileLock(lock_file, timeout=0)
+                    test_lock.acquire()
+                    test_lock.release()
+                except Timeout:
+                    print(f"\n{'='*70}")
+                    print(f"ERROR: {name} worker is already running!")
+                    print(f"Lock file: {lock_file}")
+                    print(f"{'='*70}\n")
+                    sys.exit(1)
+
+        worker.run_once(rss=run_rss, twitter=run_twitter)
         return
 
-    if args.rss_once:
-        worker.run_once(rss=True, twitter=False)
-        return
-
-    if args.twitter_once:
-        worker.run_once(rss=False, twitter=True)
-        return
-
-    # Run continuously with file lock
+    # Run continuously with file locks
+    # Acquire ALL locks to prevent standalone workers from running simultaneously
     if not args.no_lock:
-        lock = FileLock(COMBINED_LOCK_FILE, timeout=1)
+        combined_lock = FileLock(COMBINED_LOCK_FILE, timeout=1)
+        rss_lock = FileLock(RSS_LOCK_FILE, timeout=1)
+        twitter_lock = FileLock(TWITTER_LOCK_FILE, timeout=1)
 
         try:
-            with lock:
+            with combined_lock:
                 print(f"[Combined] Acquired lock: {COMBINED_LOCK_FILE}")
-                worker.run_scheduled()
+                try:
+                    with rss_lock:
+                        print(f"[Combined] Acquired lock: {RSS_LOCK_FILE}")
+                        try:
+                            with twitter_lock:
+                                print(f"[Combined] Acquired lock: {TWITTER_LOCK_FILE}")
+                                print(f"[Combined] All locks acquired - standalone workers blocked")
+                                worker.run_scheduled()
+                        except Timeout:
+                            print(f"\n{'='*70}")
+                            print(f"ERROR: Twitter publishing worker is already running!")
+                            print(f"Lock file: {TWITTER_LOCK_FILE}")
+                            print(f"\nStop the standalone worker first, or delete the lock file:")
+                            print(f"  del {TWITTER_LOCK_FILE}")
+                            print(f"{'='*70}\n")
+                            sys.exit(1)
+                except Timeout:
+                    print(f"\n{'='*70}")
+                    print(f"ERROR: RSS ingestion worker is already running!")
+                    print(f"Lock file: {RSS_LOCK_FILE}")
+                    print(f"\nStop the standalone worker first, or delete the lock file:")
+                    print(f"  del {RSS_LOCK_FILE}")
+                    print(f"{'='*70}\n")
+                    sys.exit(1)
         except Timeout:
             print(f"\n{'='*70}")
             print(f"ERROR: Another combined worker instance is already running!")

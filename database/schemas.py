@@ -57,15 +57,15 @@ class TwitterSingleContent(BaseModel):
 class TwitterThreadContent(BaseModel):
     """Schema for THREAD format Twitter content.
 
-    Validates that a thread has 2-5 tweets (dynamic length), each properly formatted.
+    Validates that a thread has 2-6 tweets (dynamic length), each properly formatted.
     """
-    tweets: List[str] = Field(..., min_items=2, max_items=5)
+    tweets: List[str] = Field(..., min_items=2, max_items=6)
 
     @validator('tweets')
     def validate_tweets(cls, tweets):
         """Validate each tweet in the thread."""
-        if len(tweets) < 2 or len(tweets) > 5:
-            raise ValueError(f"Thread must have 2-5 tweets, got {len(tweets)}")
+        if len(tweets) < 2 or len(tweets) > 6:
+            raise ValueError(f"Thread must have 2-6 tweets, got {len(tweets)}")
 
         for i, tweet in enumerate(tweets, 1):
             # Check not empty

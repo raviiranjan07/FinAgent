@@ -73,3 +73,5 @@ api/nul
 *.sql
 # BUT allow migration files
 !database/migrations/*.sql
+
+.claude
