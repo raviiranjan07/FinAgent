@@ -26,7 +26,7 @@ if not RSS_VERIFY_SSL:
     print("⚠️  WARNING: SSL verification disabled for RSS feeds (RSS_VERIFY_SSL=false)")
 
 # Add project root to path for imports
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.event import Event
 from adapters.context import ExecutionContext

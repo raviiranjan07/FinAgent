@@ -197,6 +197,78 @@ Twitter Prompts:
   - Added BAD EXAMPLE showing fabricated "20% market share" violation
   - Added GOLDEN RULE: "Mechanics = constraints + incentives, NOT forecasts"
   - Key fix: Grounded numbers = credibility; fabricated numbers = liability
+- v4.3-nosig: REMOVED SIGNATURE PHRASE REQUIREMENTS (repetition fix)
+  - CRITICAL FIX: LLM was copying same signature phrase into every tweet
+  - Removed "End with SIGNATURE PHRASE" instruction from single tweets
+  - Removed mandatory signature phrases from thread Tweet 6
+  - Removed SIGNATURE PHRASES section from thread prompt
+  - Updated examples to show natural endings without formulaic phrases
+  - Key fix: Let content speak for itself - avoid repetitive brand stamps
+- v4.4-friction: CONTROLLED FRICTION FOR ENGAGEMENT (zero engagement fix)
+  - CRITICAL FIX: Neutral content gets zero engagement on X (attention market)
+  - Added CONTROLLED FRICTION section with hook formulas
+  - Hook patterns: "Everyone thinks X. The structure says otherwise." / "X is called safe. Here's what the data shows."
+  - Identity signals: "Most explanations miss this" / "The headline says X. The mechanism shows Y."
+  - Posture shift: From "explain calmly" to "cut through weak explanations"
+  - Safety unchanged: Still no advice, predictions, or guarantees
+  - Key principle: "Be biased against bad explanations, not biased toward outcomes"
+- v5.1-friction: CONTROLLED FRICTION FOR THREADS (engagement optimization)
+  - Applied same friction principles to thread generation
+  - Updated HOOK tweet to create stronger tension
+  - Added friction language patterns throughout thread
+  - Key fix: Neutrality is the safety rail, not the personality
+- v5.2-hooks: 3-LAYER ATTENTION STACK (attention optimization)
+  - Pattern Break → Identity Friction → Mechanism Reveal
+  - Hook templates with stakes ("and that mistake matters")
+  - Controlled aggression: allowed to call out bad explanations
+  - End with brain OPEN, not satisfied
+- v5.3-ladder: TENSION LADDER (momentum optimization)
+  - Core rule: "Every tweet must create a reason to read the next"
+  - PULL vs EXPLAIN mode: don't give answers, open questions
+  - 6-step ladder: Friction Hook → Wrong Belief → Hidden Rule → Consequence → Structural Anchor → Open Close
+  - Momentum check after each tweet
+  - PULL words vs KILL words guidance
+  - Updated Gold example with reader reactions
+- v5.4-engine: THREAD ENGINE v2 (tension-first architecture)
+  - Core philosophy: "Information does not create engagement. TENSION does."
+  - 6-stage engine: Disruptive Hook → Wrong Belief → Hidden Constraint → Causal Reversal → Consequence/Cost → Authority Close
+  - NEW: CAUSAL REVERSAL stage ("Price didn't follow demand. Demand followed price.")
+  - NEW: AUTHORITY CLOSE ends with belief lock, not open question
+  - Semantic emoji policy: 🧠 mental model, 🏦 institutions, 📊 data, 🔒 authority close
+  - Strict ordering: no definitions before tension, no data before constraint
+  - Loop concept: every tweet opens or closes a loop
+- v5.5-compact: THREAD ENGINE v2 COMPACT (~50% smaller)
+  - Same 6-stage structure, removed verbose explanations
+  - ENFORCED emoji rules: Tweet 3=🏦, Tweet 5=📊, Tweet 6=🔒
+  - Stronger causal reversal instruction with explicit pattern
+  - Single example, no templates
+  - Key fix: LLM was ignoring emojis and causal reversal in v5.4
+- v5.6-visual: MULTI-LINE TWEETS FOR VISUAL APPEAL
+  - Each tweet = 2 lines (Line 1: hook/setup, Line 2: payoff/reveal)
+  - Used \\n escape sequence for line breaks
+  - Key fix: Single-line tweets lacked visual breaks and hooks
+- v5.7-multiline: STRICT MULTI-LINE ENFORCEMENT
+  - Real newlines in output format (not escape sequences)
+  - "Single-line tweets are INVALID" - explicit fail condition
+  - Philosophy section: "People don't read to learn. They read to resolve tension."
+  - FAIL CONDITIONS listed: single-line, explains before tension, news summary
+  - Key fix: v5.6 used \\n which LLM may not interpret as line breaks
+- v5.8-meaty: ENFORCED MINIMUM LENGTH + FIXED EMOJI PLACEMENT
+  - MINIMUM 180 chars per tweet (v5.7 produced 39-86 chars)
+  - "Tweets under 150 characters are INVALID" - explicit fail condition
+  - Fixed emoji placement: 🏦 STARTS Tweet 3, 📊 STARTS Tweet 5, 🔒 STARTS Tweet 6
+  - Character-counted examples showing proper 180-210 char length
+  - Removed "2 short lines" instruction that encouraged brevity
+  - Key fix: v5.7 LLM produced tweets 70-80% below target length
+- v5.9-tension: CONTENT QUALITY RULES FOR STRONGER PULL (current)
+  - Added CONTENT QUALITY RULES section with ❌/✅ examples for each critical tweet
+  - Tweet 1: Hook must NOT reveal mechanism - only create confusion
+  - Tweet 3: Constraint must use FORCED behavior (MUST/CAN'T/FORCED/NO CHOICE), not descriptive trends
+  - Tweet 4: Reversal must be uncomfortable - make reader feel WRONG, not just informed
+  - Tweet 5: Consequences must be specific pressure points, not textbook phrases
+  - Updated examples to demonstrate quality rules
+  - Expanded FAIL CONDITIONS to include content quality issues
+  - Key fix: v5.8 content was logically correct but lacked emotional pull
 
 As per documentation Section 6.2 Core System Prompt.
 """
@@ -277,11 +349,11 @@ ADVICE_PATTERNS = [
 # TWITTER CONTENT GENERATION (Stage 2 - After Approval)
 # ============================================================================
 
-# Twitter content generation prompt - v4.2-grounded (numbers from source only)
+# Twitter content generation prompt - v4.4-friction (controlled friction for engagement)
 # Converts approved 200-400 word explanations into Twitter posts (200-280 chars)
-# Key change: Numbers MUST come from source content - never fabricate statistics
+# Key change: Add controlled friction - be biased against bad explanations, not outcomes
 TWITTER_GENERATION_SINGLE = """
-    You explain HOW financial systems work, not WHAT will happen. Create a single tweet that reveals mechanisms, not just states facts.
+    You cut through weak explanations to show how financial systems actually work. Create a single tweet that challenges narratives with structural insight.
 
     EVENT: {event_title}
     CONTENT: {poc_content}
@@ -291,7 +363,31 @@ TWITTER_GENERATION_SINGLE = """
     - TARGET: 240-260 characters (optimal engagement)
     - MAXIMUM: 280 characters (hard limit)
 
-    Tweets under 200 chars are INCOMPLETE. Add more: tension, data, mechanism, or signature phrase.
+    Tweets under 200 chars are INCOMPLETE. Add more: tension, data, or mechanism insight.
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    CONTROLLED FRICTION (what makes people stop scrolling)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    Neutrality is your SAFETY RAIL, not your personality.
+    Be biased AGAINST bad explanations, not biased TOWARD outcomes.
+
+    HOOK PATTERNS (use when opening or framing):
+    • "Everyone thinks X. The structure says otherwise."
+    • "X is called safe. Here's what the data shows."
+    • "The headline says X. The mechanism shows Y."
+    • "Most explanations miss this:"
+
+    FRICTION WORDS (create cognitive tension):
+    • "But here's the catch..."
+    • "What the headline doesn't say..."
+    • "The real story isn't X—it's Y."
+    • "despite", "while", "even as", "though"
+
+    ❌ NEUTRAL (invisible): "RBI cut rates. This affects borrowing costs."
+    ✅ FRICTION (stops scroll): "RBI cut rates. But banks don't HAVE to pass it on. Historically, they keep 40-50% of the spread."
+
+    The difference: Neutral states facts. Friction reveals what most people miss.
 
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     BRAND VOICE: Mechanics Over Narratives
@@ -322,11 +418,6 @@ TWITTER_GENERATION_SINGLE = """
 
     3. Capitalize structural words sparingly: MUST, FLOOR, CEILING, CAN'T
        These show who is forced to act vs who can leave.
-
-    4. End with SIGNATURE PHRASE when space allows:
-       • "That's not narrative—it's mechanics."
-       • "Structure explains this."
-       • "Mechanism > sentiment."
 
     ⚠️ GOLDEN RULE: Mechanics = constraints + incentives, NOT numerical forecasts.
        Describe what IS (structural force), not what WILL BE (prediction).
@@ -371,7 +462,7 @@ TWITTER_GENERATION_SINGLE = """
     Example:
     "Markets fell 2% on 'macro concerns.' But bond yields dropped too.
 
-    If fear was real, yields would spike. That's not narrative—it's mechanics."
+    If fear was real, yields would spike. Something else is moving money."
 
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     UNIVERSAL REQUIREMENTS
@@ -387,22 +478,22 @@ TWITTER_GENERATION_SINGLE = """
     - Each paragraph = 1 sentence
     - COMPLETE sentences only—never truncate mid-sentence
 
-    GOOD EXAMPLES (numeric + mechanism + tension):
+    GOOD EXAMPLES (friction + numeric + mechanism):
 
-    Example 1 - Breaking news with structural insight:
-    "Fed kept rates at 5.5%—18 months unchanged. Banks MUST still compete for deposits at 4.5%+.
+    Example 1 - Friction hook with structural insight:
+    "Fed kept rates at 5.5%—18 months unchanged. But here's the catch: banks MUST still compete for deposits at 4.5%+.
 
-    That's a FLOOR on lending rates, regardless of Fed rhetoric. Structure > sentiment."
+    That's a FLOOR on lending rates, regardless of Fed rhetoric."
 
-    Example 2 - Educational with numeric proof:
+    Example 2 - Challenge common assumption:
     "RBI fined a bank ₹1L for breaching exposure limits—lending 15% of capital to one borrower.
 
-    The rule: max 15% to any single entity. One default CAN'T sink the bank."
+    Most people miss this: the rule isn't punishment. It's structural protection. One default CAN'T sink the bank."
 
-    Example 3 - High-RPM contrarian:
-    "Yen hit 150/dollar. BOJ 'may intervene.' But intervention costs $50B+ in reserves.
+    Example 3 - Friction contrarian:
+    "Yen hit 150/dollar. Headlines say BOJ 'may intervene.' But intervention costs $50B+ in reserves.
 
-    Last time they tried (2022), it bought 3 weeks. That's not narrative—it's mechanics."
+    Last time they tried (2022), it bought 3 weeks. The structure says: expensive, temporary."
 
     BAD EXAMPLE (too short - under 200 chars):
     "Gold surges past $5,000. Central banks MUST rebalance reserves—40% of demand comes from them."
@@ -449,159 +540,93 @@ TWITTER_ALLOWED_COMPOUNDS = [
 ]
 
 # Twitter Thread Generation Template
-# Version: v5.0-compact (reduced prompt length, 1 example)
-TWITTER_GENERATION_THREAD = """You build authority through insight, not summaries. Create EXACTLY 6 tweets using this structure:
+# Version: v5.9-tension (content quality rules for stronger pull)
+TWITTER_GENERATION_THREAD = """You do not explain information.
+You DESIGN ATTENTION.
 
-    EVENT: {event_title}
-    CONTENT: {poc_content}
+Tension first. Mechanics second. Authority last.
 
-    ⚠️ CRITICAL: Each tweet MUST fit in 220-260 characters (hard limit: 280)
+EVENT: {event_title}
+CONTENT: {poc_content}
 
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    ⚠️ TRANSFORMATION RULE: Don't summarize. Extract and observe.
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ CRITICAL CONSTRAINTS
+- EXACTLY 6 tweets
+- Each tweet: 180–260 characters ONLY
+- Any tweet outside this range = INVALID
+- Tweet must contain AT LEAST 2 meaningful lines (line breaks required)
 
-    The source content is educational. Your job is NOT to summarize it.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+THE STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    Your job:
-    1. Find the STRUCTURAL CONSTRAINT (who MUST act, who CAN leave)
-    2. Find the TENSION (narrative vs structure mismatch)
-    3. Make an OBSERVATION (what this reveals about how the system works)
+TWEET 1: HOOK - Narrative vs structure mismatch
+TWEET 2: PROBLEM - What narrative says vs what structure shows
+TWEET 3: INSIGHT - WHO must act? WHO can leave?
+TWEET 4: PROOF - Specific amounts, quotas, percentages
+TWEET 5: FRAMEWORK - Specific structural signals to watch
+TWEET 6: TAKEAWAY - Strong close with observation
 
-    Example transformation:
-    SOURCE: "Banks are required to hold government securities..."
-    ❌ WRONG: "Banks buy government bonds as part of their requirements."
-    ✅ RIGHT: "Banks MUST buy govt bonds. That's a floor for demand. The question is whether anyone else shows up."
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EMOJI RULES (STRICT)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    The difference: One summarizes. The other extracts the structural force and makes an observation.
+Tweet 1: NO emoji
+Tweet 2: NO emoji
+Tweet 3: 🏦 MUST START the tweet
+Tweet 4: NO emoji
+Tweet 5: 📊 MUST START the tweet
+Tweet 6: 🔒 MUST START the tweet
 
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    THE ONLY STRUCTURE THAT WORKS
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FAIL CONDITIONS (AUTO-REWRITE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    TWEET 1: HOOK (create tension)
-    - Narrative vs structure mismatch OR uncomfortable truth
-    - Frame contrast: "X is called safe, but the auction shows otherwise"
-    - NO emoji, NO "🧵 THREAD:", NO hashtags
-    - Make reader stop scrolling
+❌ Single-line tweet
+❌ Tweet 1 reveals the mechanism/thesis
+❌ Tweet 3 uses trends instead of FORCED behavior
+❌ Tweet 3 doesn't start with 🏦
+❌ Tweet 4 PROOF - Numbers that contradict the expected narrative
+❌ Tweet 5 uses generic textbook phrases
+❌ Tweet 5 doesn't start with 📊
+❌ Tweet 6 doesn't start with 🔒
+❌ Sounds like news summary
 
-    TWEET 2: PROBLEM (reveal the gap)
-    - What the narrative says vs what structure shows
-    - Highlight mismatch between expectation and mechanics
-    - Include numbers if possible
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LANGUAGE RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    TWEET 3: INSIGHT (identify structural constraint)
-    - WHO must act? WHO can leave? What's the floor/ceiling?
-    - This is the mechanism that actually moves outcomes
-    - Use signature phrase here if natural
+• No hype, no advice, no predictions
+• No hashtags
 
-    TWEET 4: PROOF (numeric dominance)
-    - Specific amounts, quotas, percentages, timeframes
-    - Show the structural force with data
-    - This separates you from 99% of content
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    TWEET 5: FRAMEWORK (specific structural signals)
-    - NOT generic: "yield, demand, interest rates"
-    - YES specific: "bid-to-cover ratio, cutoff yield vs market yield, FPI participation"
-    - Name the EXACT metrics that reveal constraint pressure
-    - Example: "Watch: SLR utilization (bank capacity), auction devolvement (weak demand), 10Y spread widening"
+Return EXACTLY:
 
-    TWEET 6: TAKEAWAY (MANDATORY signature close)
-    ⚠️ THIS TWEET IS REQUIRED - DO NOT SKIP
-    - End with a BELIEF about the mechanism
-    - MUST include one of these EXACT phrases:
-      • "That's not narrative—it's mechanics."
-      • "Auctions don't lie. The yield tells you what the market actually thinks."
-      • "Structure explains this. Sentiment doesn't."
-    - This is your brand stamp. Never omit it.
+TWEET1:
+<multi-line text, 180-250 chars>
 
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    BRAND IDENTITY: Mechanics Over Narratives
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TWEET2:
+<multi-line text, 180-250 chars>
 
-    Your job: Explain HOW systems work, not WHAT will happen.
+TWEET3:
+🏦 <multi-line text, 180-250 chars>
 
-    Core principle: Same intelligence shows up every time.
-    - You decode mechanisms, not predict outcomes
-    - You show data patterns, not give advice
-    - You question weak narratives, not obvious relationships
+TWEET4:
+<multi-line text, 180-250 chars>
 
-    SIGNATURE PHRASES (use ONE in Tweet 3 or Tweet 6):
-    - "That's not narrative — it's mechanics."
-    - "The mechanism explains the divergence."
-    - "Narratives shift. Mechanics don't."
-    - "Structure over sentiment."
+TWEET5:
+📊 <multi-line text, 180-250 chars>
 
-    VOICE CHECK:
-    ✅ Would this sound the same regardless of market direction?
-    ✅ Does it explain WHY something works, not just WHAT happened?
-    ✅ Is there a mechanism being revealed?
+TWEET6:
+🔒 <multi-line text, 180-250 chars>
 
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    EXAMPLE: Gold vs Bitcoin Divergence
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    TWEET1: Gold hit $5K while Bitcoin dropped 8%. Both are called "inflation hedges." Only one is acting like it.
-
-    TWEET2: The narrative says BTC is "digital gold." The data says otherwise. Gold up 12% YTD, BTC down 8%. The correlation broke 6 months ago.
-
-    TWEET3: The difference isn't sentiment—it's mechanics. Gold has institutional buyers who MUST hold it. Bitcoin doesn't.
-
-    TWEET4: Central banks bought 1,000 tons of gold in 2024. China alone added 225 tons. No institution is required to hold BTC.
-
-    TWEET5: Gold has a floor: central bank demand. Bitcoin has a ceiling: speculation. When fear rises, floors matter more than ceilings.
-
-    TWEET6: BTC isn't failing as an asset. It's failing as a hedge. That's not opinion—it's what the divergence is showing.
-
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    BAD EXAMPLE: News Summary Style (DO NOT DO THIS)
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    ❌ TWEET1: India's government is selling debt to raise $3.85 billion.
-    ❌ TWEET2: The narrative is that bonds are safe, but demand can be weak.
-    ❌ TWEET3: The mechanism: auction determines price based on demand.
-    ❌ TWEET4: GoI aims to raise ₹32,000 crore with option for ₹2,000 crore more.
-    ❌ TWEET5: Three things to watch: yield, demand, and interest rates.
-    ❌ TWEET6: (MISSING - no signature close!)
-
-    WHY THIS FAILS:
-    - Hook states obvious fact, no tension
-    - "Demand can be weak" is vague, no structural constraint
-    - "Auction determines price" is textbook, not insight
-    - Numbers appear but don't show structural force
-    - Framework is generic ("yield, demand, rates"), not structural signals
-    - NO TWEET 6 with signature phrase - thread incomplete
-    - Missing: "That's not narrative—it's mechanics."
-
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    BANNED (instant fail)
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    ❌ Textbook phrasing: "often", "typically", "may indicate", "is seen as"
-    ❌ Vague hedging: "shifting sentiment", "economic factors", "market conditions"
-    ❌ Generic closers: "making this significant", "affects investors"
-    ❌ News summary style: "X announced Y. This means Z for investors."
-    ❌ Questions as endings (weak): "What do you think?" "Time will tell."
-    ❌ Emojis in hook (tweet 1)
-    ❌ Hashtags anywhere
-    ❌ Advice/predictions: "you should", "will rise", "buy/sell"
-
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    REQUIRED (every thread) - NON-NEGOTIABLE
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    ✅ EXACTLY 6 tweets (not 4, not 5 - must be 6)
-    ✅ Tweet 6 MUST have signature phrase (no exceptions)
-    ✅ Tweet 5 MUST have specific metrics (not "yield, demand, rates")
-    ✅ Data/numbers in at least 4 tweets
-    ✅ One sentence per tweet (max two)
-    ✅ Hook must create tension (narrative vs structure)
-    ✅ 8th grade language
-    ✅ COMPLETE sentences only
-
-    ⚠️ CRITICAL OUTPUT FORMAT:
-    Return EXACTLY 6 lines: "TWEET1:", "TWEET2:", "TWEET3:", "TWEET4:", "TWEET5:", "TWEET6:"
-    Tweet 6 MUST contain signature phrase. Thread is INCOMPLETE without it.
-    NO character counts, meta-commentary, compliance notes, or reasoning explanations.
-    """
+- Causal reversals must describe past or present mechanics.
+- Do NOT imply future outcomes or directional forecasts.
+- NO commentary. NO explanations.
+"""
 
 # Content strategies for different event types
 # Used by TwitterSingleAdapter and TwitterThreadAdapter
@@ -642,16 +667,29 @@ TWITTER_CONTENT_STRATEGIES = {
     }
 
 # Single tweet generation template
-def get_twitter_single_prompt(event_title: str, event_type: str, intent: str, poc_content: str) -> str:
-    """Generate prompt for single tweet with ChatGPT-style framing."""
+def get_twitter_single_prompt(event_title: str, event_type: str, intent: str, poc_content: str, version: str = None) -> str:
+    """
+    Generate prompt for single tweet with ChatGPT-style framing.
 
+    Args:
+        version: Optional prompt version (e.g., "v4.4-friction", "v4.3-nosig").
+                 If None, uses CURRENT_VERSIONS from prompt_versions.py
+    """
     # Get content strategy based on event type or intent
     strategy = TWITTER_CONTENT_STRATEGIES.get(event_type, "")
     if not strategy and intent in TWITTER_CONTENT_STRATEGIES:
         strategy = TWITTER_CONTENT_STRATEGIES[intent]
 
-    # Use the centralized template with dynamic values
-    return TWITTER_GENERATION_SINGLE.format(
+    # Use versioned prompt if version management is available
+    try:
+        from config.prompt_versions import get_single_prompt
+        template = get_single_prompt(version)
+    except ImportError:
+        # Fallback to inline prompt if version file not available
+        template = TWITTER_GENERATION_SINGLE
+
+    # Use the template with dynamic values
+    return template.format(
         event_type=event_type,
         intent=intent,
         event_title=event_title,
@@ -701,9 +739,14 @@ TWITTER_THREAD_STRATEGIES = {
 }
 
 # Thread generation template
-def get_twitter_thread_prompt(event_title: str, event_type: str, intent: str, poc_content: str) -> str:
-    """Generate prompt for dynamic-length thread (2-5 tweets) with ChatGPT-style framing."""
+def get_twitter_thread_prompt(event_title: str, event_type: str, intent: str, poc_content: str, version: str = None) -> str:
+    """
+    Generate prompt for dynamic-length thread (2-6 tweets) with ChatGPT-style framing.
 
+    Args:
+        version: Optional prompt version (e.g., "v5.1-friction", "v5.0-compact").
+                 If None, uses CURRENT_VERSIONS from prompt_versions.py
+    """
     # Get thread strategy
     strategy = TWITTER_THREAD_STRATEGIES.get(event_type)
     if not strategy and intent in TWITTER_THREAD_STRATEGIES:
@@ -711,8 +754,16 @@ def get_twitter_thread_prompt(event_title: str, event_type: str, intent: str, po
     if not strategy:
         strategy = TWITTER_THREAD_STRATEGIES["DEFAULT"]
 
-    # Use the centralized template with dynamic values
-    return TWITTER_GENERATION_THREAD.format(
+    # Use versioned prompt if version management is available
+    try:
+        from config.prompt_versions import get_thread_prompt
+        template = get_thread_prompt(version)
+    except ImportError:
+        # Fallback to inline prompt if version file not available
+        template = TWITTER_GENERATION_THREAD
+
+    # Use the template with dynamic values
+    return template.format(
         event_type=event_type,
         intent=intent,
         event_title=event_title,
