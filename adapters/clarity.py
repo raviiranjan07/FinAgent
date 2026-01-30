@@ -17,7 +17,7 @@ class ClarityAdapter(BaseAdapter):
     """
 
     name = "clarity_adapter"
-    version = "1.3.0"
+    version = "1.4.0"  # Added BREAKING_NEWS and DATA_RELEASE checks
     input_keys = ["llm_output", "event_type", "intent"]
     output_keys = ["clarity_issues"]
 
@@ -121,6 +121,37 @@ class ClarityAdapter(BaseAdapter):
                 "payment must be made", "settlement date"
             ]):
                 issues.append("Too procedural for descriptive content")
+
+        # 5a. BREAKING_NEWS specific checks
+        if context.intent == "BREAKING_NEWS":
+            word_count = len(text.split())
+            # Breaking news should be concise
+            if word_count > 300:
+                issues.append("Breaking news should be concise (under 300 words)")
+
+            # Breaking news should report facts, not predictions
+            if any(k in lower for k in [
+                "will likely", "expected to", "may cause",
+                "could lead to", "might result in", "probably"
+            ]):
+                issues.append("Breaking news should report facts, not predictions")
+
+        # 5b. DATA_RELEASE specific checks
+        if context.intent == "DATA_RELEASE":
+            # Data release should contain specific numbers/percentages
+            has_numbers = bool(re.search(r'\d+\.?\d*\s*%', text))  # Percentage
+            has_figures = bool(re.search(r'\d{2,}', text))  # Numbers with 2+ digits
+
+            if not has_numbers and not has_figures:
+                issues.append("Data release should include specific numbers or percentages")
+
+            # Should compare to expectations or previous data
+            has_comparison = any(k in lower for k in [
+                "vs", "versus", "compared to", "from", "previous",
+                "expected", "estimate", "forecast", "prior", "last"
+            ])
+            if not has_comparison:
+                issues.append("Data release should compare to expectations or previous data")
 
         # 6. Universal safety checks
         if any(k in lower for k in [
