@@ -1,9 +1,9 @@
 """Output routes."""
 
-from typing import Optional
+from typing import Optional, Literal
 from fastapi import APIRouter, HTTPException, Query
 from uuid import UUID
-from sqlalchemy import desc
+from sqlalchemy import desc, asc
 from sqlalchemy.orm import joinedload
 
 from database.connection import get_db_session
@@ -27,6 +27,7 @@ async def list_outputs(
     event_type: Optional[str] = None,
     pending_only: bool = False,
     hitl_only: bool = False,
+    sort_order: Literal["asc", "desc"] = "desc",
 ):
     """
     List outputs with pagination.
@@ -41,6 +42,9 @@ async def list_outputs(
     with get_db_session() as db:
         repo = RepositoryManager(db)
 
+        # Determine sort order
+        order_func = desc if sort_order == "desc" else asc
+
         # Base query with eager loading (prevents N+1 queries)
         base_query = (
             db.query(Output)
@@ -49,7 +53,7 @@ async def list_outputs(
                 joinedload(Output.event),       # Eager load event
                 joinedload(Output.evaluations)  # Eager load evaluations
             )
-            .order_by(desc(Event.published_at))
+            .order_by(order_func(Event.published_at))
         )
 
         # Apply filters
@@ -64,7 +68,7 @@ async def list_outputs(
                     joinedload(Output.event),
                     joinedload(Output.evaluations)
                 )
-                .order_by(desc(Event.published_at))
+                .order_by(order_func(Event.published_at))
             )
         elif hitl_only:
             base_query = base_query.filter(Output.hitl_required == True)

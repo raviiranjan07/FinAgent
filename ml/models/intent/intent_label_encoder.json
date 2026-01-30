@@ -1,0 +1,23 @@
+{
+  "index_to_label": {
+    "0": "BREAKING_NEWS",
+    "1": "DATA_RELEASE",
+    "2": "DESCRIPTIVE",
+    "3": "EXPLANATORY",
+    "4": "MARKET_OPINION"
+  },
+  "label_to_index": {
+    "BREAKING_NEWS": "0",
+    "DATA_RELEASE": "1",
+    "DESCRIPTIVE": "2",
+    "EXPLANATORY": "3",
+    "MARKET_OPINION": "4"
+  },
+  "classes": [
+    "BREAKING_NEWS",
+    "DATA_RELEASE",
+    "DESCRIPTIVE",
+    "EXPLANATORY",
+    "MARKET_OPINION"
+  ]
+}

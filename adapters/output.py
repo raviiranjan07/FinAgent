@@ -1,4 +1,4 @@
-"""OutputAdapter - Generates LLM explanation using frozen prompt."""
+"""ContextAdapter - Generates LLM explanation using frozen prompt."""
 
 import hashlib
 import time
@@ -11,11 +11,11 @@ from services.llm_service import LLMService
 from utils.timezone import get_ist_now
 
 
-class OutputAdapter(BaseAdapter):
+class ContextAdapter(BaseAdapter):
     """
     Generates LLM explanation using the frozen system prompt.
 
-    As per documentation Section 4.5.3 OutputAdapter.
+    As per documentation Section 4.5.3 ContextAdapter.
     Includes retry logic with exponential backoff for resilience.
 
     Version History:
@@ -28,7 +28,7 @@ class OutputAdapter(BaseAdapter):
               to avoid suppressing output length
     """
 
-    name = "output_adapter"
+    name = "context_adapter"
     version = "1.5.0"  # Fixed: Reuse EmbeddingService instance instead of creating new one each call
     input_keys = ["event", "event_type", "intent"]
     output_keys = ["llm_output"]
@@ -108,13 +108,13 @@ class OutputAdapter(BaseAdapter):
         start_time = time.time()
 
         # Get intent-specific task
-        task = INTENT_TASKS.get(context.intent, INTENT_TASKS["DESCRIPTIVE"])
+        # task = INTENT_TASKS.get(context.intent, INTENT_TASKS["DESCRIPTIVE"])
 
         # Truncate content if too large (prevents LLM timeout on heavy data)
         content = context.event.summary
         if len(content) > MAX_CONTENT_LENGTH:
             content = content[:MAX_CONTENT_LENGTH] + "\n[Content truncated for processing]"
-            print(f"    Content truncated: {len(context.event.summary)} -> {MAX_CONTENT_LENGTH} chars")
+            print(f"Content truncated: {len(context.event.summary)} -> {MAX_CONTENT_LENGTH} chars")
 
         # Build prompt
         prompt = f"""SYSTEM:
@@ -126,10 +126,11 @@ class OutputAdapter(BaseAdapter):
         EVENT CONTENT:
         {content}
 
-        TASK:
-        {task}
         """
-
+        
+        # TASK:
+        # {task}
+        
         # First attempt
         llm_output = self._call_llm_with_retry(prompt, context.event.event_id)
 

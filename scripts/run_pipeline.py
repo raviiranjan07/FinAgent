@@ -34,7 +34,7 @@ from adapters.embedding import EmbeddingAdapter
 from adapters.dedup import DeduplicationAdapter
 from adapters.event_type import EventTypeAdapter
 from adapters.intent import IntentAdapter
-from adapters.output import OutputAdapter
+from adapters.output import ContextAdapter
 from adapters.clarity import ClarityAdapter
 from adapters.hitl import HITLDecisionAdapter
 from adapters.logger import LoggerAdapter
@@ -244,10 +244,12 @@ def create_pipeline() -> list:
 
     Pipeline order:
     EmbeddingAdapter -> DeduplicationAdapter -> EventTypeAdapter -> IntentAdapter ->
-    OutputAdapter -> ClarityAdapter -> HITLDecisionAdapter -> LoggerAdapter -> DatabaseAdapter
+    ContextAdapter -> ClarityAdapter -> HITLDecisionAdapter -> LoggerAdapter -> DatabaseAdapter
 
     Note: Embedding runs first, then Dedup uses embeddings for semantic similarity.
     Dedup skips duplicates early to save LLM calls.
+    IntentAdapter runs BEFORE ContextAdapter (OutputAdapter) so intent is available
+    for output generation prompts.
     DatabaseAdapter saves to PostgreSQL (disabled by default, enable when DB is running).
     """
     # Check if database is available
@@ -258,8 +260,8 @@ def create_pipeline() -> list:
         EmbeddingAdapter(),
         DeduplicationAdapter(),
         EventTypeAdapter(),
-        IntentAdapter(),
-        OutputAdapter(),
+        IntentAdapter(),        # Intent extracted before output generation
+        ContextAdapter(),       # OutputAdapter - uses intent for generation
         ClarityAdapter(),
         HITLDecisionAdapter(),
         LoggerAdapter(),

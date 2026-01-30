@@ -182,7 +182,7 @@ Pre-MVP succeeds when:
 ## 4.2 Content Pipeline (Unchanged from POC)
 
 ```
-RSS Event → ExecutionContext → EventTypeAdapter → IntentAdapter → OutputAdapter → ClarityAdapter → HITLDecisionAdapter → LoggerAdapter
+RSS Event → ExecutionContext → EventTypeAdapter → IntentAdapter → ContextAdapter → ClarityAdapter → HITLDecisionAdapter → LoggerAdapter
 ```
 
 ## 4.3 Technology Stack
@@ -1053,12 +1053,12 @@ COMMENT ON COLUMN outputs.generation_metadata IS
 'Immutable snapshot of LLM configuration, prompt version, and generation parameters';
 ```
 
-**2. Capture in OutputAdapter**
+**2. Capture in ContextAdapter**
 
 ```python
 # adapters/output.py
 
-class OutputAdapter(BaseAdapter):
+class ContextAdapter(BaseAdapter):
 
     def run(self, event: Event, context: ExecutionContext):
         # Generate content

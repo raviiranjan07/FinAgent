@@ -26,7 +26,7 @@
 │  │ 2. DeduplicationAdapter → URL + Semantic check (cosine ≥0.85)  │
 │  │ 3. EventTypeAdapter     → 6 types (rule-based)                  │
 │  │ 4. IntentAdapter        → 3 intents (rule-based)                │
-│  │ 5. OutputAdapter        → LLM generation (Gemini→Groq→Ollama)   │
+│  │ 5. ContextAdapter       → LLM generation (Gemini→Groq→Ollama)   │
 │  │ 6. ClarityAdapter       → Safety validation                     │
 │  │ 7. HITLDecisionAdapter  → Human review decision                 │
 │  │ 8. LoggerAdapter        → JSONL log                             │
@@ -123,7 +123,7 @@ Event → ExecutionContext → [Adapter Chain] → Database
 | 2 | DeduplicationAdapter | url, embedding | dedup (DedupResult) | Early exit if duplicate |
 | 3 | EventTypeAdapter | title, summary | event_type | Early exit if SKIP |
 | 4 | IntentAdapter | title, summary | intent | Rule-based |
-| 5 | OutputAdapter | event, type, intent | llm_output | LLM with retry |
+| 5 | ContextAdapter | event, type, intent | llm_output | LLM with retry |
 | 6 | ClarityAdapter | llm_output | clarity_issues[] | Safety validation |
 | 7 | HITLDecisionAdapter | clarity_issues | hitl (HITLDecision) | Human review decision |
 | 8 | LoggerAdapter | all context | log_record | JSONL file |

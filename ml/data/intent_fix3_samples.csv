@@ -1,0 +1,97 @@
+"text",label
+"Brokerages turn negative on FMCG stocks on rural demand weakness",MARKET_OPINION
+"Brokerages turn negative on IT sector on deal pipeline concerns",MARKET_OPINION
+"Brokerages turn negative on banking stocks on NIM pressure",MARKET_OPINION
+"Brokerages turn negative on auto stocks on demand slowdown",MARKET_OPINION
+"Brokerages turn negative on pharma stocks on pricing pressure",MARKET_OPINION
+"Brokerages turn cautious on metal stocks on China concerns",MARKET_OPINION
+"Brokerages turn bearish on realty stocks on rate concerns",MARKET_OPINION
+"Brokerages turn pessimistic on cement stocks on demand weakness",MARKET_OPINION
+"Traders expect more downside in metal stocks on China slowdown",MARKET_OPINION
+"Traders expect more downside in IT stocks on demand weakness",MARKET_OPINION
+"Traders expect more downside in banking stocks on NIM compression",MARKET_OPINION
+"Traders expect more downside in auto stocks on volume concerns",MARKET_OPINION
+"Traders expect more weakness in pharma stocks on FDA issues",MARKET_OPINION
+"Traders expect further decline in FMCG stocks on rural stress",MARKET_OPINION
+"Traders expect continued selling in realty stocks on rates",MARKET_OPINION
+"Traders expect correction in cement stocks on demand issues",MARKET_OPINION
+"Analysts expect Nifty to reach 25000 by year end on earnings growth",MARKET_OPINION
+"Analysts expect Sensex to hit 80000 by December on FII flows",MARKET_OPINION
+"Analysts expect Nifty to touch 24000 in coming months",MARKET_OPINION
+"Analysts expect Sensex to cross 75000 on budget optimism",MARKET_OPINION
+"Analysts expect Bank Nifty to reach 50000 on credit growth",MARKET_OPINION
+"Analysts expect IT index to hit 40000 on deal wins",MARKET_OPINION
+"Analysts expect gold to reach 70000 rupees on safe haven demand",MARKET_OPINION
+"Analysts expect silver to touch 90000 rupees by year end",MARKET_OPINION
+"Traders betting on Bitcoin reaching 100000 dollars by December",MARKET_OPINION
+"Traders betting on Ethereum crossing 5000 dollars this year",MARKET_OPINION
+"Traders betting on gold hitting 2800 dollars on Fed cuts",MARKET_OPINION
+"Traders betting on oil reaching 100 dollars on supply cuts",MARKET_OPINION
+"Traders betting on Nifty crossing 23000 before budget",MARKET_OPINION
+"Traders betting on rupee weakening to 85 against dollar",MARKET_OPINION
+"Traders betting on rate cuts by RBI in next policy",MARKET_OPINION
+"Traders betting on inflation cooling below 5 percent",MARKET_OPINION
+"Fund managers expect earnings growth to accelerate in H2",MARKET_OPINION
+"Fund managers expect IT sector to outperform in coming quarters",MARKET_OPINION
+"Fund managers expect banking stocks to rally on credit growth",MARKET_OPINION
+"Fund managers expect midcaps to underperform near term",MARKET_OPINION
+"Strategists expect market volatility to increase ahead of elections",MARKET_OPINION
+"Strategists expect defensive sectors to outperform cyclicals",MARKET_OPINION
+"Strategists expect value stocks to beat growth stocks this year",MARKET_OPINION
+"Strategists expect small caps to face headwinds on liquidity",MARKET_OPINION
+"Nifty closes above 22000 level with banking stocks providing support",DESCRIPTIVE
+"Nifty closes above 23000 mark for first time this month",DESCRIPTIVE
+"Nifty closes above 21500 level on broad based buying",DESCRIPTIVE
+"Nifty closes above 22500 with IT and pharma leading gains",DESCRIPTIVE
+"Sensex closes above 73000 level with HDFC Bank contributing",DESCRIPTIVE
+"Sensex closes above 74000 mark on FII buying support",DESCRIPTIVE
+"Sensex closes above 72000 level in cautious trade today",DESCRIPTIVE
+"Bank Nifty closes above 48000 level on private bank buying",DESCRIPTIVE
+"Nifty IT closes above 35000 on TCS and Infosys gains",DESCRIPTIVE
+"Nifty Pharma closes above 18000 level on FDA approval news",DESCRIPTIVE
+"Markets close above key resistance levels on broad buying",DESCRIPTIVE
+"Index closes above 200 day moving average on momentum",DESCRIPTIVE
+"FII outflows continue for fifth session totaling 3200 crores",DESCRIPTIVE
+"FII outflows continue for sixth consecutive day at 2800 crores",DESCRIPTIVE
+"FII outflows continue for third session with 1500 crore selling",DESCRIPTIVE
+"FII outflows continue for fourth day totaling 4000 crores weekly",DESCRIPTIVE
+"FII outflows extend to seventh session at 3500 crores",DESCRIPTIVE
+"FII selling continues for second week with 8000 crore outflows",DESCRIPTIVE
+"Foreign investors sell for eighth straight session at 2200 crores",DESCRIPTIVE
+"FII selling persists for ninth day with 1800 crore outflows",DESCRIPTIVE
+"DII buying continues for fifth session offsetting FII selling",DESCRIPTIVE
+"DII inflows continue for third consecutive day at 2500 crores",DESCRIPTIVE
+"Institutional flows remain negative for sixth session running",DESCRIPTIVE
+"Net FII outflows total 15000 crores in January month so far",DESCRIPTIVE
+"Fed raises rates by 25 basis points citing persistent inflation",EXPLANATORY
+"Fed raises rates by 50 bps in aggressive move against inflation",EXPLANATORY
+"Fed raises interest rates by 75 basis points largest hike since 1994",EXPLANATORY
+"Fed raises rates by quarter point as inflation remains elevated",EXPLANATORY
+"Fed hikes rates by 25 bps signaling more tightening ahead",EXPLANATORY
+"Federal Reserve raises rates by 25 basis points to combat prices",EXPLANATORY
+"Fed increases rates by 50 bps citing strong labor market",EXPLANATORY
+"Federal Reserve hikes rates by quarter percentage point",EXPLANATORY
+"RBI keeps repo rate unchanged at 6.5 percent citing inflation",EXPLANATORY
+"RBI keeps rates unchanged for fifth consecutive meeting",EXPLANATORY
+"RBI holds repo rate steady at 6.5 percent on inflation watch",EXPLANATORY
+"RBI maintains status quo on rates citing growth inflation balance",EXPLANATORY
+"RBI keeps policy rate unchanged at 6.5 percent as expected",EXPLANATORY
+"Reserve Bank keeps repo rate on hold at 6.5 percent",EXPLANATORY
+"RBI holds interest rates steady for fourth straight meeting",EXPLANATORY
+"RBI maintains repo rate at 6.5 percent in policy review",EXPLANATORY
+"ECB cuts rates by 25 basis points on disinflation progress",EXPLANATORY
+"ECB cuts rates by quarter point as inflation cools in eurozone",EXPLANATORY
+"ECB reduces rates by 25 bps signaling gradual easing ahead",EXPLANATORY
+"ECB lowers rates by 25 basis points citing weak growth outlook",EXPLANATORY
+"European Central Bank cuts rates by quarter percentage point",EXPLANATORY
+"ECB cuts interest rates by 25 bps for second consecutive meeting",EXPLANATORY
+"ECB reduces policy rate by 25 basis points on cooling prices",EXPLANATORY
+"ECB cuts rates by quarter point as inflation approaches target",EXPLANATORY
+"Bank of England holds rates at 5.25 percent on inflation concerns",EXPLANATORY
+"Bank of Japan raises rates to 0.25 percent ending negative era",EXPLANATORY
+"PBOC cuts rates by 10 basis points to support economy",EXPLANATORY
+"RBA holds rates at 4.35 percent citing sticky inflation",EXPLANATORY
+"Bank of Canada cuts rates by 25 bps signaling easing cycle",EXPLANATORY
+"SNB cuts rates by 25 basis points on low inflation",EXPLANATORY
+"Norges Bank holds rates at 4.5 percent on krone weakness",EXPLANATORY
+"Central bank policy decision to impact market sentiment",EXPLANATORY

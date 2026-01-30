@@ -22,6 +22,7 @@ import {
   Info,
   Loader2,
   ArrowRight,
+  ArrowUpDown,
 } from "lucide-react"
 
 // X Logo Component
@@ -34,8 +35,11 @@ const XLogo = ({ className = "h-4 w-4" }: { className?: string }) => (
 export function Outputs() {
   const [page, setPage] = useState(1)
   const [pendingOnly, setPendingOnly] = useState(true)
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null)
-  const [failureReason, setFailureReason] = useState("")
+  const [failureReason, setFailureReason] = useState("")  // Legacy, kept for backwards compat
+  const [correctedEventType, setCorrectedEventType] = useState("")
+  const [correctedIntent, setCorrectedIntent] = useState("")
   const [comment, setComment] = useState("")
   const [generatingTwitter, setGeneratingTwitter] = useState(false)
   const [twitterGenSuccess, setTwitterGenSuccess] = useState(false)
@@ -66,8 +70,8 @@ export function Outputs() {
   }, [subscribe, queryClient])
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["outputs", page, pendingOnly],
-    queryFn: () => outputsApi.list(page, 20, { pending_only: pendingOnly }),
+    queryKey: ["outputs", page, pendingOnly, sortOrder],
+    queryFn: () => outputsApi.list(page, 20, { pending_only: pendingOnly, sort_order: sortOrder }),
   })
 
   const createEvaluation = useMutation({
@@ -77,6 +81,8 @@ export function Outputs() {
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
       setSelectedOutputId(null)
       setFailureReason("")
+      setCorrectedEventType("")
+      setCorrectedIntent("")
       setComment("")
     },
   })
@@ -136,17 +142,20 @@ export function Outputs() {
     },
   })
 
-  const handleEvaluate = (verdict: "PASS" | "FAIL") => {
+  const handleEvaluate = (verdict: "PASS" | "FAIL" | "ACCEPT") => {
     if (!selectedOutput) return
-    if (verdict === "FAIL" && !failureReason) {
-      alert("Please provide a failure reason")
+
+    // FAIL and ACCEPT require both dropdowns to be filled
+    if (verdict !== "PASS" && (!correctedEventType || !correctedIntent)) {
+      alert("Please select both Event Type and Intent for FAIL/ACCEPT verdicts")
       return
     }
 
     createEvaluation.mutate({
       output_id: selectedOutput.id,
       verdict,
-      failure_reason: verdict === "FAIL" ? failureReason : undefined,
+      corrected_event_type: verdict !== "PASS" ? correctedEventType : undefined,
+      corrected_intent: verdict !== "PASS" ? correctedIntent : undefined,
       comment: comment || undefined,
     })
   }
@@ -254,27 +263,41 @@ export function Outputs() {
           </div>
           <p className="text-gray-500 dark:text-gray-400 mt-1">Review and evaluate LLM-generated content</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
           <Button
-            variant={pendingOnly ? "default" : "outline"}
+            variant="outline"
             size="sm"
             onClick={() => {
-              setPendingOnly(true)
+              setSortOrder(sortOrder === "desc" ? "asc" : "desc")
               setPage(1)
             }}
+            className="flex items-center gap-1"
           >
-            Pending Only
+            <ArrowUpDown className="h-4 w-4" />
+            {sortOrder === "desc" ? "Newest First" : "Oldest First"}
           </Button>
-          <Button
-            variant={!pendingOnly ? "default" : "outline"}
-            size="sm"
-            onClick={() => {
-              setPendingOnly(false)
-              setPage(1)
-            }}
-          >
-            All Outputs
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={pendingOnly ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setPendingOnly(true)
+                setPage(1)
+              }}
+            >
+              Pending Only
+            </Button>
+            <Button
+              variant={!pendingOnly ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setPendingOnly(false)
+                setPage(1)
+              }}
+            >
+              All Outputs
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -365,7 +388,13 @@ export function Outputs() {
                         </Badge>
                       )}
                       {output.has_evaluation ? (
-                        <Badge variant={output.evaluation_verdict === "PASS" ? "success" : "destructive"}>
+                        <Badge
+                          variant={
+                            output.evaluation_verdict === "PASS" ? "success" :
+                            output.evaluation_verdict === "ACCEPT" ? "default" : "destructive"
+                          }
+                          className={output.evaluation_verdict === "ACCEPT" ? "bg-blue-600 text-white" : ""}
+                        >
                           {output.evaluation_verdict}
                         </Badge>
                       ) : (
@@ -536,16 +565,30 @@ export function Outputs() {
                   <h4 className="font-medium mb-3">Evaluation Result:</h4>
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {selectedOutput.evaluation.verdict === "PASS" ? (
+                      {selectedOutput.evaluation.verdict === "PASS" || selectedOutput.evaluation.verdict === "ACCEPT" ? (
                         <CheckCircle className="h-5 w-5 text-green-500" />
                       ) : (
                         <XCircle className="h-5 w-5 text-red-500" />
                       )}
-                      <Badge variant={selectedOutput.evaluation.verdict === "PASS" ? "success" : "destructive"}>
+                      <Badge variant={
+                        selectedOutput.evaluation.verdict === "PASS" ? "success" :
+                        selectedOutput.evaluation.verdict === "ACCEPT" ? "default" : "destructive"
+                      } className={selectedOutput.evaluation.verdict === "ACCEPT" ? "bg-blue-600 text-white" : ""}>
                         {selectedOutput.evaluation.verdict}
                       </Badge>
                       {selectedOutput.evaluation.failure_reason && (
                         <Badge variant="outline">{selectedOutput.evaluation.failure_reason}</Badge>
+                      )}
+                      {/* Show corrected classification for ACCEPT/FAIL */}
+                      {selectedOutput.evaluation.corrected_event_type && (
+                        <Badge variant="outline" className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200">
+                          Corrected: {selectedOutput.evaluation.corrected_event_type}
+                        </Badge>
+                      )}
+                      {selectedOutput.evaluation.corrected_intent && (
+                        <Badge variant="outline" className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200">
+                          Intent: {selectedOutput.evaluation.corrected_intent}
+                        </Badge>
                       )}
                       {/* Auto-Approved Badge */}
                       {selectedOutput.evaluation.auto_approved && (
@@ -639,8 +682,8 @@ export function Outputs() {
                     </p>
                   </div>
 
-                  {/* Generate X Content Button (PASS only) */}
-                  {selectedOutput.evaluation.verdict === "PASS" && (
+                  {/* Generate X Content Button (PASS or ACCEPT) */}
+                  {(selectedOutput.evaluation.verdict === "PASS" || selectedOutput.evaluation.verdict === "ACCEPT") && (
                     <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                       <h4 className="font-medium mb-3 text-gray-900 dark:text-white">Next Steps:</h4>
 
@@ -718,26 +761,59 @@ export function Outputs() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-1 text-gray-900 dark:text-white">
-                      Failure Reason (required for FAIL)
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-md text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
-                      value={failureReason}
-                      onChange={(e) => setFailureReason(e.target.value)}
-                    >
-                      <option value="">Select a reason...</option>
-                      <option value="ADVICE_DETECTED">Advice Detected</option>
-                      <option value="PREDICTION_MADE">Prediction Made</option>
-                      <option value="JARGON_NOT_EXPLAINED">Jargon Not Explained</option>
-                      <option value="FACTUAL_ERROR">Factual Error</option>
-                      <option value="INCOMPLETE_EXPLANATION">Incomplete Explanation</option>
-                      <option value="SENSATIONALISM">Sensationalism</option>
-                      <option value="OTHER">Other</option>
-                    </select>
+                  {/* Type/Intent Dropdowns for Training Data Collection */}
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                    <h4 className="font-medium mb-3 text-yellow-800 dark:text-yellow-200">
+                      Correct Classification (required for FAIL/ACCEPT)
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Event Type Dropdown */}
+                      <div>
+                        <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
+                          Event Type
+                        </label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-md text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                          value={correctedEventType}
+                          onChange={(e) => setCorrectedEventType(e.target.value)}
+                        >
+                          <option value="">Select type...</option>
+                          <option value="DIGITAL_ASSETS">DIGITAL_ASSETS</option>
+                          <option value="FINANCE_POLICY">FINANCE_POLICY</option>
+                          <option value="GEO_FINANCIAL">GEO_FINANCIAL</option>
+                          <option value="MACRO_ECONOMIC">MACRO_ECONOMIC</option>
+                          <option value="MARKET_INFRASTRUCTURE">MARKET_INFRASTRUCTURE</option>
+                          <option value="MARKET_MOVEMENT">MARKET_MOVEMENT</option>
+                          <option value="NON_FINANCE">NON_FINANCE</option>
+                          <option value="SKIP">SKIP</option>
+                        </select>
+                      </div>
+
+                      {/* Intent Dropdown */}
+                      <div>
+                        <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
+                          Intent
+                        </label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-md text-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                          value={correctedIntent}
+                          onChange={(e) => setCorrectedIntent(e.target.value)}
+                        >
+                          <option value="">Select intent...</option>
+                          <option value="EXPLANATORY">EXPLANATORY</option>
+                          <option value="DESCRIPTIVE">DESCRIPTIVE</option>
+                          <option value="MARKET_OPINION">MARKET_OPINION</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-2">
+                      Select the correct type/intent if ML got it wrong. This data trains future models.
+                    </p>
                   </div>
 
+                  {/* Three Verdict Buttons */}
                   <div className="flex gap-3">
                     <Button
                       variant="success"
@@ -749,14 +825,29 @@ export function Outputs() {
                       Pass
                     </Button>
                     <Button
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                      onClick={() => handleEvaluate("ACCEPT")}
+                      disabled={createEvaluation.isPending || !correctedEventType || !correctedIntent}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Accept
+                    </Button>
+                    <Button
                       variant="destructive"
                       className="flex-1"
                       onClick={() => handleEvaluate("FAIL")}
-                      disabled={createEvaluation.isPending}
+                      disabled={createEvaluation.isPending || !correctedEventType || !correctedIntent}
                     >
                       <XCircle className="h-4 w-4 mr-2" />
                       Fail
                     </Button>
+                  </div>
+
+                  {/* Verdict Explanation */}
+                  <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                    <p><strong>PASS:</strong> Content good, ML classification correct (no dropdowns needed)</p>
+                    <p><strong>ACCEPT:</strong> Content good, but ML got type/intent wrong (goes to queue + training data)</p>
+                    <p><strong>FAIL:</strong> Content rejected (training data only)</p>
                   </div>
                 </div>
               )}

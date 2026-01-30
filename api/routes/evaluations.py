@@ -15,6 +15,15 @@ from api.websocket import manager
 
 router = APIRouter()
 
+# Valid values for dropdowns
+VALID_EVENT_TYPES = [
+    "DIGITAL_ASSETS", "FINANCE_POLICY", "GEO_FINANCIAL",
+    "MACRO_ECONOMIC", "MARKET_INFRASTRUCTURE", "MARKET_MOVEMENT",
+    "NON_FINANCE", "SKIP"
+]
+
+VALID_INTENTS = ["EXPLANATORY", "DESCRIPTIVE", "MARKET_OPINION"]
+
 
 @router.post("", response_model=EvaluationResponse)
 async def create_evaluation(evaluation: EvaluationCreate):
@@ -43,19 +52,37 @@ async def create_evaluation(evaluation: EvaluationCreate):
                 detail="Output already evaluated. Use PUT to update."
             )
 
-        # Validate verdict
-        if evaluation.verdict not in ["PASS", "FAIL"]:
+        # Validate verdict (supports 3 verdicts: PASS, FAIL, ACCEPT)
+        if evaluation.verdict not in ["PASS", "FAIL", "ACCEPT"]:
             raise HTTPException(
                 status_code=400,
-                detail="Verdict must be 'PASS' or 'FAIL'"
+                detail="Verdict must be 'PASS', 'FAIL', or 'ACCEPT'"
             )
 
-        # Require failure_reason for FAIL verdict
-        if evaluation.verdict == "FAIL" and not evaluation.failure_reason:
-            raise HTTPException(
-                status_code=400,
-                detail="failure_reason is required when verdict is FAIL"
-            )
+        # FAIL and ACCEPT require corrected_event_type and corrected_intent for training data
+        if evaluation.verdict in ["FAIL", "ACCEPT"]:
+            if not evaluation.corrected_event_type:
+                raise HTTPException(
+                    status_code=400,
+                    detail="corrected_event_type is required for FAIL/ACCEPT verdicts"
+                )
+            if not evaluation.corrected_intent:
+                raise HTTPException(
+                    status_code=400,
+                    detail="corrected_intent is required for FAIL/ACCEPT verdicts"
+                )
+
+            # Validate dropdown values
+            if evaluation.corrected_event_type not in VALID_EVENT_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid event type: {evaluation.corrected_event_type}. Must be one of {VALID_EVENT_TYPES}"
+                )
+            if evaluation.corrected_intent not in VALID_INTENTS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid intent: {evaluation.corrected_intent}. Must be one of {VALID_INTENTS}"
+                )
 
         # Create evaluation
         eval_data = {
@@ -63,6 +90,8 @@ async def create_evaluation(evaluation: EvaluationCreate):
             "output_id": UUID(evaluation.output_id),
             "verdict": evaluation.verdict,
             "failure_reason": evaluation.failure_reason,
+            "corrected_event_type": evaluation.corrected_event_type,
+            "corrected_intent": evaluation.corrected_intent,
             "comment": evaluation.comment,
             "evaluator": evaluation.evaluator or "default",
         }
@@ -83,6 +112,8 @@ async def create_evaluation(evaluation: EvaluationCreate):
             output_id=str(new_eval.output_id),
             verdict=new_eval.verdict,
             failure_reason=new_eval.failure_reason,
+            corrected_event_type=new_eval.corrected_event_type,
+            corrected_intent=new_eval.corrected_intent,
             comment=new_eval.comment,
             evaluator=new_eval.evaluator,
             evaluated_at=new_eval.evaluated_at,
@@ -101,10 +132,10 @@ async def list_evaluations(
 
         # Get evaluations
         if verdict:
-            if verdict not in ["PASS", "FAIL"]:
+            if verdict not in ["PASS", "FAIL", "ACCEPT"]:
                 raise HTTPException(
                     status_code=400,
-                    detail="verdict must be 'PASS' or 'FAIL'"
+                    detail="verdict must be 'PASS', 'FAIL', or 'ACCEPT'"
                 )
             evaluations = repo.evaluations.get_by_verdict(verdict, limit=page_size * page)
         else:
@@ -128,6 +159,8 @@ async def list_evaluations(
                 output_id=str(e.output_id),
                 verdict=e.verdict,
                 failure_reason=e.failure_reason,
+                corrected_event_type=e.corrected_event_type,
+                corrected_intent=e.corrected_intent,
                 comment=e.comment,
                 evaluator=e.evaluator,
                 evaluated_at=e.evaluated_at,
@@ -164,6 +197,8 @@ async def get_evaluation(evaluation_id: str):
             output_id=str(evaluation.output_id),
             verdict=evaluation.verdict,
             failure_reason=evaluation.failure_reason,
+            corrected_event_type=evaluation.corrected_event_type,
+            corrected_intent=evaluation.corrected_intent,
             comment=evaluation.comment,
             evaluator=evaluation.evaluator,
             evaluated_at=evaluation.evaluated_at,
@@ -184,24 +219,44 @@ async def update_evaluation(evaluation_id: str, evaluation: EvaluationCreate):
         if not existing:
             raise HTTPException(status_code=404, detail="Evaluation not found")
 
-        # Validate verdict
-        if evaluation.verdict not in ["PASS", "FAIL"]:
+        # Validate verdict (supports 3 verdicts: PASS, FAIL, ACCEPT)
+        if evaluation.verdict not in ["PASS", "FAIL", "ACCEPT"]:
             raise HTTPException(
                 status_code=400,
-                detail="Verdict must be 'PASS' or 'FAIL'"
+                detail="Verdict must be 'PASS', 'FAIL', or 'ACCEPT'"
             )
 
-        # Require failure_reason for FAIL verdict
-        if evaluation.verdict == "FAIL" and not evaluation.failure_reason:
-            raise HTTPException(
-                status_code=400,
-                detail="failure_reason is required when verdict is FAIL"
-            )
+        # FAIL and ACCEPT require corrected_event_type and corrected_intent for training data
+        if evaluation.verdict in ["FAIL", "ACCEPT"]:
+            if not evaluation.corrected_event_type:
+                raise HTTPException(
+                    status_code=400,
+                    detail="corrected_event_type is required for FAIL/ACCEPT verdicts"
+                )
+            if not evaluation.corrected_intent:
+                raise HTTPException(
+                    status_code=400,
+                    detail="corrected_intent is required for FAIL/ACCEPT verdicts"
+                )
+
+            # Validate dropdown values
+            if evaluation.corrected_event_type not in VALID_EVENT_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid event type: {evaluation.corrected_event_type}. Must be one of {VALID_EVENT_TYPES}"
+                )
+            if evaluation.corrected_intent not in VALID_INTENTS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid intent: {evaluation.corrected_intent}. Must be one of {VALID_INTENTS}"
+                )
 
         # Update evaluation
         update_data = {
             "verdict": evaluation.verdict,
             "failure_reason": evaluation.failure_reason,
+            "corrected_event_type": evaluation.corrected_event_type,
+            "corrected_intent": evaluation.corrected_intent,
             "comment": evaluation.comment,
             "evaluator": evaluation.evaluator or existing.evaluator,
         }
@@ -222,6 +277,8 @@ async def update_evaluation(evaluation_id: str, evaluation: EvaluationCreate):
             output_id=str(updated.output_id),
             verdict=updated.verdict,
             failure_reason=updated.failure_reason,
+            corrected_event_type=updated.corrected_event_type,
+            corrected_intent=updated.corrected_intent,
             comment=updated.comment,
             evaluator=updated.evaluator,
             evaluated_at=updated.evaluated_at,

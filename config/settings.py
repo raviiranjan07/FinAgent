@@ -221,8 +221,8 @@ LLM_ENABLE_OLLAMA_FALLBACK = os.getenv("LLM_ENABLE_OLLAMA_FALLBACK", "true").low
 MODEL_NAME = OLLAMA_MODEL
 
 # Processing Configuration
-MAX_EVENTS = 4
-MAX_CONTENT_LENGTH = 3000  # Truncate content longer than this to prevent LLM timeout
+MAX_EVENTS = 8
+MAX_CONTENT_LENGTH = 4000  # Truncate content longer than this to prevent LLM timeout
 
 # Event Type Categories
 EVENT_TYPES = [

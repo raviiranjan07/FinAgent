@@ -626,7 +626,7 @@ class LLMService:
             last_call_attr = '_last_gemini_primary_call'
             rate_limit = LLMService._gemini_primary_rate_limit
             model_label = "Gemini Primary"
-        else:  # gemini_secondary
+        else: 
             lock = LLMService._gemini_secondary_lock
             last_call_attr = '_last_gemini_secondary_call'
             rate_limit = LLMService._gemini_secondary_rate_limit

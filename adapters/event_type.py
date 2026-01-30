@@ -11,7 +11,7 @@ import onnxruntime as ort
 
 from adapters.base import BaseAdapter
 from adapters.context import ExecutionContext
-from ml.validate import clean_text
+from ml.event.validate import clean_text
 
 
 class EventTypeAdapter(BaseAdapter):

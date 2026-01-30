@@ -192,7 +192,7 @@ async def regenerate_output(event_id: str):
     from adapters.context import ExecutionContext
     from adapters.event_type import EventTypeAdapter
     from adapters.intent import IntentAdapter
-    from adapters.output import OutputAdapter
+    from adapters.output import ContextAdapter
     from adapters.clarity import ClarityAdapter
     from adapters.hitl import HITLDecisionAdapter
     from adapters.database import DatabaseAdapter
@@ -221,7 +221,7 @@ async def regenerate_output(event_id: str):
             pipeline = [
                 EventTypeAdapter(),
                 IntentAdapter(),
-                OutputAdapter(),
+                ContextAdapter(),
                 ClarityAdapter(),
                 HITLDecisionAdapter(),
                 DatabaseAdapter(),  # Saves to database

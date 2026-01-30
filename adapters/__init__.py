@@ -5,7 +5,7 @@ from .context import ExecutionContext, HITLDecision, DedupResult
 from .dedup import DeduplicationAdapter
 from .event_type import EventTypeAdapter
 from .intent import IntentAdapter
-from .output import OutputAdapter
+from .output import ContextAdapter
 from .clarity import ClarityAdapter
 from .hitl import HITLDecisionAdapter
 from .logger import LoggerAdapter
@@ -18,7 +18,7 @@ __all__ = [
     "DeduplicationAdapter",
     "EventTypeAdapter",
     "IntentAdapter",
-    "OutputAdapter",
+    "ContextAdapter",
     "ClarityAdapter",
     "HITLDecisionAdapter",
     "LoggerAdapter"

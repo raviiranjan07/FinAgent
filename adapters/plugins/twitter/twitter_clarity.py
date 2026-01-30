@@ -2,19 +2,15 @@
 
 Validation Rules:
 1. Length constraints (≤280 chars per tweet)
-2. No advice/prediction language
-3. No generic phrases (low PED)
+2. No generic phrases (low PED)
+3. No certainty language
 4. Proper formatting
-5. Safety guardrails
 
 Key Difference from Main Clarity:
 - Main Clarity: Validates POC content (1500 chars)
 - Twitter Clarity: Validates platform-specific content (280 chars)
 - Stricter enforcement for public-facing content
 """
-
-from config.prompts import TWITTER_FORBIDDEN_PHRASES, TWITTER_ALLOWED_COMPOUNDS
-from utils.forbidden_words import detect_forbidden_phrases
 
 
 class TwitterClarityAdapter:
@@ -116,18 +112,12 @@ class TwitterClarityAdapter:
             issues.append(f"Tweet {tweet_num}: Empty content")
             return issues  # No point checking further
 
-        # 3. Forbidden phrases check (advice/prediction language)
-        # Use smart detection with boundary awareness and whitelisting
-        forbidden_issues = detect_forbidden_phrases(tweet)
-        for phrase, context in forbidden_issues:
-            issues.append(f"Tweet {tweet_num}: Contains forbidden phrase '{phrase}'")
-
-        # 4. Generic phrases check (low PED)
+        # 3. Generic phrases check (low PED)
         for phrase in self.GENERIC_PHRASES:
             if phrase in tweet_lower:
                 issues.append(f"Tweet {tweet_num}: Contains generic phrase '{phrase}' (low insight density)")
 
-        # 5. Certainty language check (not in forbidden list but still risky)
+        # 4. Certainty language check
         certainty_phrases = ["definitely", "certainly", "guaranteed", "always", "never", "100%"]
         for phrase in certainty_phrases:
             if phrase in tweet_lower:

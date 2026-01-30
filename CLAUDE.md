@@ -118,7 +118,7 @@ Adapters (in order):
 2. DeduplicationAdapter  - Semantic duplicate detection (cosine >0.85)
 3. EventTypeAdapter      - Event classification
 4. IntentAdapter         - Content intent
-5. OutputAdapter         - LLM content generation
+5. ContextAdapter        - LLM content generation
 6. ClarityAdapter        - Safety validation
 7. HITLDecisionAdapter   - Human review decision
 8. DatabaseAdapter       - PostgreSQL + WebSocket notifications

@@ -100,8 +100,10 @@ class OutputDetailResponse(OutputResponse):
 class EvaluationCreate(BaseModel):
     """Schema for creating an evaluation."""
     output_id: str
-    verdict: str  # "PASS" or "FAIL"
-    failure_reason: Optional[str] = None
+    verdict: str  # "PASS", "FAIL", or "ACCEPT"
+    failure_reason: Optional[str] = None  # Legacy field, kept for backwards compatibility
+    corrected_event_type: Optional[str] = None  # Required for FAIL/ACCEPT
+    corrected_intent: Optional[str] = None  # Required for FAIL/ACCEPT
     comment: Optional[str] = None
     evaluator: Optional[str] = "default"
 
@@ -112,7 +114,9 @@ class EvaluationResponse(BaseModel):
     event_id: str
     output_id: str
     verdict: str
-    failure_reason: Optional[str] = None
+    failure_reason: Optional[str] = None  # Legacy field, kept for backwards compatibility
+    corrected_event_type: Optional[str] = None
+    corrected_intent: Optional[str] = None
     comment: Optional[str] = None
     evaluator: Optional[str] = None
     evaluated_at: datetime

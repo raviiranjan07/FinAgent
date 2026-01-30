@@ -125,6 +125,11 @@ class Evaluation(Base):
     evaluator = Column(String(100))
     evaluated_at = Column(DateTime, default=get_ist_now)
 
+    # Training data correction fields (added in migration 015)
+    # For ACCEPT/FAIL verdicts: stores human-corrected classification
+    corrected_event_type = Column(String(50))
+    corrected_intent = Column(String(50))
+
     # Auto-approval tracking (added in migration 010)
     auto_approved = Column(Boolean, default=False)
     confidence_score = Column(Float)
@@ -136,7 +141,7 @@ class Evaluation(Base):
     output = relationship("Output", back_populates="evaluations")
 
     __table_args__ = (
-        CheckConstraint("verdict IN ('PASS', 'FAIL')", name="check_verdict"),
+        CheckConstraint("verdict IN ('PASS', 'FAIL', 'ACCEPT')", name="check_verdict"),
         Index("idx_evaluations_verdict", "verdict"),
         Index("idx_evaluations_auto_approved", "auto_approved"),
     )
@@ -155,6 +160,8 @@ class Evaluation(Base):
             "comment": self.comment,
             "evaluator": self.evaluator,
             "evaluated_at": self.evaluated_at.isoformat() if self.evaluated_at else None,
+            "corrected_event_type": self.corrected_event_type,
+            "corrected_intent": self.corrected_intent,
             "auto_approved": self.auto_approved,
             "confidence_score": self.confidence_score,
             "confidence_signals": self.confidence_signals,

@@ -45,6 +45,7 @@ class ExecutionContext(BaseModel):
     secondary_event_type: Optional[str] = None  # Secondary category if multi-label
     secondary_event_type_confidence: Optional[float] = None  # Secondary label confidence
     intent: Optional[str] = None
+    intent_confidence: Optional[float] = None  # ML classifier confidence (0-1)
     llm_output: Optional[str] = None
     llm_model: Optional[str] = None  # LLM model name that generated the output
     clarity_issues: List[str] = []

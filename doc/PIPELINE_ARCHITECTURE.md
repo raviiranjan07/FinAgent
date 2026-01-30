@@ -58,7 +58,7 @@ RSS Feed
 [4] IntentAdapter ─────────────► Classify intent (EXPLANATORY/DESCRIPTIVE/MARKET_OPINION)
    │
    ▼
-[5] OutputAdapter ─────────────► Generate LLM explanation (200-400 words)
+[5] ContextAdapter ────────────► Generate LLM explanation (200-400 words)
    │                              Uses: Groq/Gemini/Ollama with fallbacks
    ▼
 [6] ClarityAdapter ────────────► Validate safety rules

@@ -60,8 +60,10 @@ export interface Evaluation {
   id: string
   event_id: string
   output_id: string
-  verdict: "PASS" | "FAIL"
-  failure_reason: string | null
+  verdict: "PASS" | "FAIL" | "ACCEPT"
+  failure_reason: string | null  // Legacy field
+  corrected_event_type: string | null  // Required for FAIL/ACCEPT
+  corrected_intent: string | null  // Required for FAIL/ACCEPT
   comment: string | null
   evaluator: string | null
   evaluated_at: string
@@ -221,7 +223,7 @@ export const eventsApi = {
 }
 
 export const outputsApi = {
-  list: (page = 1, pageSize = 20, options?: { event_type?: string; pending_only?: boolean; hitl_only?: boolean }) =>
+  list: (page = 1, pageSize = 20, options?: { event_type?: string; pending_only?: boolean; hitl_only?: boolean; sort_order?: "asc" | "desc" }) =>
     api
       .get<PaginatedResponse<Output>>("/outputs", {
         params: { page, page_size: pageSize, ...options },
@@ -239,9 +241,24 @@ export const evaluationsApi = {
       })
       .then((r) => r.data),
   get: (evaluationId: string) => api.get<Evaluation>(`/evaluations/${evaluationId}`).then((r) => r.data),
-  create: (data: { output_id: string; verdict: string; failure_reason?: string; comment?: string; evaluator?: string }) =>
+  create: (data: {
+    output_id: string
+    verdict: "PASS" | "FAIL" | "ACCEPT"
+    failure_reason?: string
+    corrected_event_type?: string  // Required for FAIL/ACCEPT
+    corrected_intent?: string  // Required for FAIL/ACCEPT
+    comment?: string
+    evaluator?: string
+  }) =>
     api.post<Evaluation>("/evaluations", data).then((r) => r.data),
-  update: (evaluationId: string, data: { output_id: string; verdict: string; failure_reason?: string; comment?: string }) =>
+  update: (evaluationId: string, data: {
+    output_id: string
+    verdict: "PASS" | "FAIL" | "ACCEPT"
+    failure_reason?: string
+    corrected_event_type?: string  // Required for FAIL/ACCEPT
+    corrected_intent?: string  // Required for FAIL/ACCEPT
+    comment?: string
+  }) =>
     api.put<Evaluation>(`/evaluations/${evaluationId}`, data).then((r) => r.data),
   delete: (evaluationId: string) => api.delete(`/evaluations/${evaluationId}`).then((r) => r.data),
 }

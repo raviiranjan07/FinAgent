@@ -217,7 +217,7 @@ The adapter-based architecture ensures **modularity, scalability, and safe evolu
                                                                        │
                                                                        ▼
 ┌───────────────┐    ┌─────────────────────┐    ┌────────────────┐    ┌───────────────┐
-│ LoggerAdapter │◀───│ HITLDecisionAdapter │◀───│ ClarityAdapter │◀───│ OutputAdapter │
+│ LoggerAdapter │◀───│ HITLDecisionAdapter │◀───│ ClarityAdapter │◀───│ ContextAdapter │
 └───────────────┘    └─────────────────────┘    └────────────────┘    └───────────────┘
 ```
 
@@ -230,7 +230,7 @@ class ExecutionContext:
     event: Event                    # Input event data
     event_type: str                 # Set by EventTypeAdapter
     intent: str                     # Set by IntentAdapter
-    llm_output: str                 # Set by OutputAdapter
+    llm_output: str                 # Set by ContextAdapter
     clarity_issues: List[str]       # Set by ClarityAdapter
     hitl: HITLDecision              # Set by HITLDecisionAdapter
     log_record: dict                # Set by LoggerAdapter
@@ -272,7 +272,7 @@ Every adapter **must** expose:
 | **Input Keys** | `event.title`, `event.summary` |
 | **Output Keys** | `context.intent` |
 
-### 4.5.3 OutputAdapter
+### 4.5.3 ContextAdapter
 
 | Property | Value |
 |----------|-------|
