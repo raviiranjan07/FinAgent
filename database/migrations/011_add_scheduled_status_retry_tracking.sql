@@ -101,10 +101,4 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 
 COMMENT ON FUNCTION calculate_next_retry_time IS 'Calculate next retry time using exponential backoff (1s, 2s, 4s)';
 
--- ============================================================================
--- 6. Insert migration record
--- ============================================================================
-
-INSERT INTO migrations (version, description, applied_at)
-VALUES (11, 'Add scheduled status and retry tracking for publishing worker', CURRENT_TIMESTAMP)
-ON CONFLICT (version) DO NOTHING;
+-- Note: Migration tracking is handled automatically by run_migrations.py via schema_migrations table

@@ -11,7 +11,4 @@ CREATE INDEX IF NOT EXISTS idx_outputs_llm_model ON outputs(llm_model);
 -- Add comment
 COMMENT ON COLUMN outputs.llm_model IS 'LLM model used to generate output (e.g., gemini-2.5-flash, qwen/qwen3-32b, llama3)';
 
--- Insert migration record
-INSERT INTO migrations (version, description, applied_at)
-VALUES (12, 'Add llm_model column to outputs table', CURRENT_TIMESTAMP)
-ON CONFLICT (version) DO NOTHING;
+-- Note: Migration tracking is handled automatically by run_migrations.py via schema_migrations table

@@ -87,10 +87,4 @@ CREATE INDEX IF NOT EXISTS idx_evaluations_verdict ON evaluations(verdict) WHERE
 -- Index for auto-approved evaluations
 CREATE INDEX IF NOT EXISTS idx_evaluations_auto_approved ON evaluations(auto_approved) WHERE auto_approved = TRUE;
 
--- ============================================================================
--- 5. Insert migration record
--- ============================================================================
-
-INSERT INTO migrations (version, description, applied_at)
-VALUES (10, 'Add auto-approval system with confidence scoring and audit history', CURRENT_TIMESTAMP)
-ON CONFLICT (version) DO NOTHING;
+-- Note: Migration tracking is handled automatically by run_migrations.py via schema_migrations table

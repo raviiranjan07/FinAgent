@@ -33,10 +33,4 @@ WHERE status = 'failed' AND rate_limit_reset IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_content_queue_orphaned ON content_queue(status)
 WHERE orphaned_tweet_ids IS NOT NULL;
 
--- ============================================================================
--- 4. Insert migration record
--- ============================================================================
-
-INSERT INTO migrations (version, description, applied_at)
-VALUES (14, 'Add rate_limit_reset and orphaned_tweet_ids columns for Twitter error handling', CURRENT_TIMESTAMP)
-ON CONFLICT (version) DO NOTHING;
+-- Note: Migration tracking is handled automatically by run_migrations.py via schema_migrations table
