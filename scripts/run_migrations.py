@@ -113,7 +113,7 @@ def run_all_migrations(auto_confirm=False):
     Args:
         auto_confirm: If True, skip confirmation prompt and apply migrations automatically
     """
-    migrations_dir = Path(__file__).parent / "database" / "migrations"
+    migrations_dir = Path(__file__).parent.parent / "database" / "migrations"
 
     if not migrations_dir.exists():
         print(f"❌ Migrations directory not found: {migrations_dir}")
