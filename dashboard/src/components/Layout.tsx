@@ -16,7 +16,7 @@ const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Events", href: "/events", icon: Newspaper },
   { name: "Outputs", href: "/outputs", icon: FileText },
-  { name: "Approved Queue", href: "/approved-queue", icon: ClipboardList },
+  // { name: "Approved Queue", href: "/approved-queue", icon: ClipboardList }, // REMOVED: Users generate Twitter content directly from Outputs
   { name: "Generated Content", href: "/generated-content", icon: Twitter },
   { name: "Statistics", href: "/stats", icon: BarChart3 },
 ]

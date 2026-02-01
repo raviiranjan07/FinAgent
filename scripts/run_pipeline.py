@@ -8,6 +8,7 @@ Orchestrates the adapter pipeline for processing finance events.
 import os
 import sys
 import time
+import argparse
 from datetime import datetime, timedelta
 
 # Load environment variables from .env file
@@ -39,6 +40,7 @@ from adapters.clarity import ClarityAdapter
 from adapters.hitl import HITLDecisionAdapter
 from adapters.logger import LoggerAdapter
 from adapters.database import DatabaseAdapter
+from adapters.twitter_direct import TwitterDirectAdapter
 from config.settings import (
     RSS_SOURCES,
     MAX_EVENTS,
@@ -238,35 +240,54 @@ def fetch_events(source_name: str, url: str, quota: int = MAX_EVENTS) -> list:
     return events
 
 
-def create_pipeline() -> list:
+def create_pipeline(pipeline_version: str = "v1") -> list:
     """
     Create the adapter pipeline.
 
-    Pipeline order:
-    EmbeddingAdapter -> DeduplicationAdapter -> EventTypeAdapter -> IntentAdapter ->
-    ContextAdapter -> ClarityAdapter -> HITLDecisionAdapter -> LoggerAdapter -> DatabaseAdapter
+    Pipeline versions:
+    - v1 (default): Full pipeline with 400-word explanation generation
+      EmbeddingAdapter -> DeduplicationAdapter -> EventTypeAdapter -> IntentAdapter ->
+      ContextAdapter -> ClarityAdapter -> HITLDecisionAdapter -> LoggerAdapter -> DatabaseAdapter
+
+    - v2: Direct Twitter generation (bypasses 400-word explanation)
+      EmbeddingAdapter -> DeduplicationAdapter -> EventTypeAdapter -> IntentAdapter ->
+      TwitterDirectAdapter -> LoggerAdapter -> DatabaseAdapter
 
     Note: Embedding runs first, then Dedup uses embeddings for semantic similarity.
     Dedup skips duplicates early to save LLM calls.
-    IntentAdapter runs BEFORE ContextAdapter (OutputAdapter) so intent is available
-    for output generation prompts.
+    IntentAdapter runs BEFORE content generation so intent is available for prompts.
     DatabaseAdapter saves to PostgreSQL (disabled by default, enable when DB is running).
     """
     # Check if database is available
     db_enabled = os.getenv("DATABASE_ENABLED", "false").lower() == "true"
     print(f"Database persistence: {'ENABLED' if db_enabled else 'DISABLED'}")
+    print(f"Pipeline version: {pipeline_version}")
 
-    return [
+    # Common adapters (used by both pipelines)
+    common_adapters = [
         EmbeddingAdapter(),
         DeduplicationAdapter(),
         EventTypeAdapter(),
-        IntentAdapter(),        # Intent extracted before output generation
-        ContextAdapter(),       # OutputAdapter - uses intent for generation
-        ClarityAdapter(),
-        HITLDecisionAdapter(),
-        LoggerAdapter(),
-        DatabaseAdapter(enabled=db_enabled)
+        IntentAdapter(),
     ]
+
+    if pipeline_version == "v2":
+        # v2 pipeline: Direct Twitter generation
+        # DatabaseAdapter runs BEFORE TwitterDirectAdapter to save event and get db_event_id
+        return common_adapters + [
+            DatabaseAdapter(enabled=db_enabled),  # Saves event first
+            TwitterDirectAdapter(),  # Uses db_event_id from DatabaseAdapter
+            LoggerAdapter(),
+        ]
+    else:
+        # v1 pipeline: Traditional flow (with 400-word explanation)
+        return common_adapters + [
+            ContextAdapter(),       # OutputAdapter - generates 400-word explanation
+            # ClarityAdapter(),     # DISABLED: Collecting real data for ML training
+            HITLDecisionAdapter(),
+            LoggerAdapter(),
+            DatabaseAdapter(enabled=db_enabled)
+        ]
 
 
 def process_event(event: Event, pipeline: list) -> ExecutionContext:
@@ -397,38 +418,107 @@ def select_events_by_priority() -> list:
     return selected_events
 
 
-def run():
+def run(pipeline_version: str = "v1"):
     """
     Main Pipeline execution with per-source backfill.
+
+    Args:
+        pipeline_version: "v1" (traditional), "v2" (direct Twitter), or "both" (side-by-side)
 
     Deduplication and backfill are handled at the fetch level (per-source),
     so each source independently fetches until it has enough unique events.
     """
-    print("Starting Pipeline run (Per-Source Backfill Architecture)...\n")
+    print(f"Starting Pipeline run (Pipeline version: {pipeline_version})...\n")
     start_time = time.time()
 
     # Load processed URLs at startup
     load_processed_urls()
 
-    pipeline = create_pipeline()
+    # Handle "both" mode: run both pipelines side-by-side
+    if pipeline_version == "both":
+        print("Running BOTH v1 and v2 pipelines for comparison")
+        print("=" * 60)
+
+        v1_pipeline = create_pipeline("v1")
+        v2_pipeline = create_pipeline("v2")
+
+        print(f"\nv1 Pipeline: {' -> '.join(a.name for a in v1_pipeline)}")
+        print(f"v2 Pipeline: {' -> '.join(a.name for a in v2_pipeline)}\n")
+
+        # Fetch events once (shared for both pipelines)
+        events = select_events_by_priority()
+
+        # Process through both pipelines
+        v1_stats = process_events_with_pipeline(events, v1_pipeline, "v1")
+        v2_stats = process_events_with_pipeline(events, v2_pipeline, "v2")
+
+        # Combined summary
+        total_time = time.time() - start_time
+        print("\n" + "=" * 60)
+        print("COMPARISON: v1 vs v2 Pipelines")
+        print("=" * 60)
+        print(f"Events selected: {len(events)}")
+        print(f"\nv1 (Traditional):")
+        print(f"  Processed: {v1_stats['processed']}, Duplicates: {v1_stats['duplicates']}, Skipped: {v1_stats['skipped']}")
+        print(f"  HITL required: {v1_stats['hitl_required']}, Clarity issues: {v1_stats['clarity_issues']}")
+        print(f"\nv2 (Direct Twitter):")
+        print(f"  Processed: {v2_stats['processed']}, Duplicates: {v2_stats['duplicates']}, Skipped: {v2_stats['skipped']}")
+        print(f"  HITL required: {v2_stats['hitl_required']}")
+        print(f"\nTotal time: {total_time:.2f} seconds")
+        print("=" * 60)
+        print("Next step: Review content_queue in dashboard to compare v1 vs v2 outputs")
+        print("=" * 60)
+        return
+
+    # Single pipeline mode (v1 or v2)
+    pipeline = create_pipeline(pipeline_version)
     print(f"Pipeline: {' -> '.join(a.name for a in pipeline)}\n")
 
-    # Fetch events (with per-source backfill built-in)
+    # Fetch events
     events = select_events_by_priority()
 
-    # Process events through pipeline
+    # Process events
+    stats = process_events_with_pipeline(events, pipeline, pipeline_version)
+
+    # Summary
+    total_time = time.time() - start_time
+    print("\n" + "=" * 60)
+    print(f"Pipeline Run Complete ({pipeline_version})")
+    print("=" * 60)
+    print(f"Events selected (unique URLs): {len(events)}")
+    print(f"Events successfully processed: {stats['processed']}")
+    print(f"Semantic duplicates skipped: {stats['duplicates']}")
+    print(f"Admin/legal skipped: {stats['skipped']}")
+    if pipeline_version == "v1":
+        print(f"Total clarity issues: {stats['clarity_issues']}")
+    print(f"Events requiring HITL: {stats['hitl_required']}")
+    print(f"Total time: {total_time:.2f} seconds")
+
+
+def process_events_with_pipeline(events: list, pipeline: list, pipeline_name: str) -> dict:
+    """
+    Process events through a pipeline and return statistics.
+
+    Args:
+        events: List of events to process
+        pipeline: List of adapter instances
+        pipeline_name: Name for logging (v1, v2, etc.)
+
+    Returns:
+        Dict with processing statistics
+    """
     total_processed = 0
     total_duplicates = 0
     total_skipped = 0
     total_issues = 0
     hitl_required_count = 0
 
-    print(f"\nProcessing {len(events)} events through pipeline...")
+    print(f"\nProcessing {len(events)} events through {pipeline_name} pipeline...")
     print("-" * 60)
 
     for idx, event in enumerate(events, start=1):
         category = get_category_for_source(event.source) or "UNKNOWN"
-        print(f"[{idx}/{len(events)}] [{category}] {event.source}: {event.title[:50]}...")
+        print(f"[{pipeline_name}][{idx}/{len(events)}] [{category}] {event.source}: {event.title[:50]}...")
 
         context = process_event(event, pipeline)
 
@@ -448,7 +538,7 @@ def run():
         total_processed += 1
         print(f"  -> {context.event_type} | {context.intent}")
 
-        if context.clarity_issues:
+        if hasattr(context, 'clarity_issues') and context.clarity_issues:
             total_issues += len(context.clarity_issues)
             print(f"     Clarity issues: {context.clarity_issues}")
 
@@ -456,19 +546,26 @@ def run():
             hitl_required_count += 1
             print(f"     HITL: {context.hitl.risk_level} - {context.hitl.auto_action}")
 
-    # Summary
-    total_time = time.time() - start_time
-    print("\n" + "=" * 60)
-    print("Pipeline Run Complete (Per-Source Backfill)")
-    print("=" * 60)
-    print(f"Events selected (unique URLs): {len(events)}")
-    print(f"Events successfully processed: {total_processed}")
-    print(f"Semantic duplicates skipped: {total_duplicates}")
-    print(f"Admin/legal skipped: {total_skipped}")
-    print(f"Total clarity issues: {total_issues}")
-    print(f"Events requiring HITL: {hitl_required_count}")
-    print(f"Total time: {total_time:.2f} seconds")
+    return {
+        "processed": total_processed,
+        "duplicates": total_duplicates,
+        "skipped": total_skipped,
+        "clarity_issues": total_issues,
+        "hitl_required": hitl_required_count
+    }
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(
+        description="FinAgent Pipeline - Process finance events with optional pipeline version selection"
+    )
+    parser.add_argument(
+        "--pipeline",
+        type=str,
+        choices=["v1", "v2", "both"],
+        default="v1",
+        help="Pipeline version: v1 (traditional with 400-word explanation), v2 (direct Twitter generation), or both (side-by-side comparison)"
+    )
+    args = parser.parse_args()
+
+    run(pipeline_version=args.pipeline)

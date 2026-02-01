@@ -214,6 +214,15 @@ class OutputRepository:
         )
         return {event_type: count for event_type, count in results}
 
+    def count_by_intent(self) -> Dict[str, int]:
+        """Count outputs grouped by intent."""
+        results = (
+            self.db.query(Output.intent, func.count(Output.id))
+            .group_by(Output.intent)
+            .all()
+        )
+        return {intent: count for intent, count in results}
+
 
 class EvaluationRepository:
     """CRUD operations for evaluations."""

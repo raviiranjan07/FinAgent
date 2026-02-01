@@ -221,6 +221,11 @@ class ContentQueue(Base):
     generation_timestamp = Column(DateTime)  # When content was generated
     generation_context = Column(JSONB, default=dict)  # Full snapshot for debugging
 
+    # Pipeline versioning (for parallel pipeline testing)
+    pipeline_version = Column(String(10), default='v1')  # 'v1' (via outputs) or 'v2' (direct)
+    source_event_id = Column(UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"))  # Direct link to event (v2 pipeline)
+    generation_intent = Column(String(50))  # Intent used for generation (enables regeneration)
+
     # Audit fields
     created_at = Column(DateTime, default=get_ist_now)
     updated_at = Column(DateTime, default=get_ist_now, onupdate=get_ist_now)
@@ -240,6 +245,8 @@ class ContentQueue(Base):
         Index("idx_content_queue_plugin_version", "plugin_version"),
         Index("idx_content_queue_model_used", "model_used"),
         Index("idx_content_queue_scheduled_for", "scheduled_for"),
+        Index("idx_content_queue_pipeline_version", "pipeline_version"),
+        Index("idx_content_queue_source_event_id", "source_event_id"),
     )
 
     def __repr__(self):

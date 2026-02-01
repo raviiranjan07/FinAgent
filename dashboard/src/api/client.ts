@@ -223,7 +223,7 @@ export const eventsApi = {
 }
 
 export const outputsApi = {
-  list: (page = 1, pageSize = 20, options?: { event_type?: string; pending_only?: boolean; hitl_only?: boolean; sort_order?: "asc" | "desc" }) =>
+  list: (page = 1, pageSize = 20, options?: { event_type?: string; intent?: string; pending_only?: boolean; hitl_only?: boolean; sort_order?: "asc" | "desc" }) =>
     api
       .get<PaginatedResponse<Output>>("/outputs", {
         params: { page, page_size: pageSize, ...options },
@@ -231,6 +231,7 @@ export const outputsApi = {
       .then((r) => r.data),
   get: (outputId: string) => api.get<Output>(`/outputs/${outputId}`).then((r) => r.data),
   getEventTypes: () => api.get("/outputs/event-types/list").then((r) => r.data),
+  getIntents: () => api.get("/outputs/intents/list").then((r) => r.data),
 }
 
 export const evaluationsApi = {
@@ -261,37 +262,6 @@ export const evaluationsApi = {
   }) =>
     api.put<Evaluation>(`/evaluations/${evaluationId}`, data).then((r) => r.data),
   delete: (evaluationId: string) => api.delete(`/evaluations/${evaluationId}`).then((r) => r.data),
-}
-
-export interface ApprovedQueueItem {
-  output_id: string
-  event_id: string
-  event_title: string
-  event_source: string
-  event_published_at: string
-  event_type: string
-  intent: string
-  hitl_risk_level: string
-  clarity_issues: string[]
-  llm_output: string
-  created_at: string
-  approved_at: string | null
-}
-
-export interface ApprovedQueueResponse {
-  items: ApprovedQueueItem[]
-  total: number
-}
-
-export const approvedQueueApi = {
-  list: (limit = 50, offset = 0) =>
-    api
-      .get<ApprovedQueueResponse>("/selection/approved-queue", {
-        params: { limit, offset },
-      })
-      .then((r) => r.data),
-  approveForGeneration: (outputIds: string[]) =>
-    api.post("/selection/approve-for-generation", { output_ids: outputIds }).then((r) => r.data),
 }
 
 export const contentApi = {
@@ -406,6 +376,9 @@ export interface TwitterContentItem {
   publish_attempts?: number
   retry_count?: number
   last_publish_attempt?: string | null
+  // Pipeline version (v2 = direct from RSS with intent-specific prompts)
+  pipeline_version?: string | null
+  generation_intent?: string | null
 }
 
 export interface TwitterContentListResponse {

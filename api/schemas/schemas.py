@@ -69,6 +69,8 @@ class OutputResponse(OutputBase):
     suggested_verdict_reason: Optional[str] = None
     # Agreement field (computed: suggested == actual)
     ai_human_agreement: Optional[bool] = None
+    # LLM model used
+    llm_model: Optional[str] = None
     # Generation metadata (audit trail)
     generation_metadata: Optional[dict] = None
 

@@ -9,8 +9,6 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from zoneinfo import ZoneInfo
-import subprocess
-import sys
 import json
 
 from database.connection import get_db, get_db_session
@@ -85,6 +83,8 @@ class TwitterContentItem(BaseModel):
     scheduled_for: Optional[datetime] = None  # Scheduled publish time
     created_at: datetime
     updated_at: Optional[datetime] = None
+    pipeline_version: Optional[str] = None  # v1 or v2
+    generation_intent: Optional[str] = None  # Intent used for generation
 
     class Config:
         from_attributes = True
@@ -99,14 +99,12 @@ class TwitterContentListResponse(BaseModel):
 @router.post("/generate", response_model=GenerateTwitterContentResponse)
 async def generate_twitter_content(request: GenerateTwitterContentRequest, background_tasks: BackgroundTasks):
     """
-    Generate Twitter content from an approved output.
+    Generate Twitter content from an approved output using v2 pipeline.
 
-    This triggers the Twitter plugin pipeline:
-    1. ImpactFraming: Extract angles
-    2. FormatDecision: Decide SINGLE vs THREAD
-    3. TwitterGeneration: Create content
-    4. TwitterClarity: Validate
-    5. Save to content_queue
+    Uses TwitterDirectAdapter which generates intent-specific tweets directly from
+    the RSS event (no intermediate 400-word explanation needed).
+
+    Format decision: EXPLANATORY/POLICY → THREAD, others → SINGLE
 
     Args:
         request: GenerateTwitterContentRequest with output_id
@@ -136,35 +134,95 @@ async def generate_twitter_content(request: GenerateTwitterContentRequest, backg
             )
 
         # Check if already generated
-        existing = db.query(ContentQueue).filter(
-            ContentQueue.output_id == output.id
+        existing_v2 = db.query(ContentQueue).filter(
+            ContentQueue.output_id == output.id,
+            ContentQueue.pipeline_version == 'v2'
         ).first()
 
-        if existing:
+        if existing_v2:
             raise HTTPException(
                 status_code=409,
                 detail={
                     "error": "already_generated",
-                    "content_queue_id": str(existing.id),
+                    "content_queue_id": str(existing_v2.id),
                     "message": "Twitter content already generated for this output"
                 }
             )
 
-        # Trigger Twitter plugin in background
-        # We'll use subprocess to run the plugin script
-        def run_twitter_plugin():
-            subprocess.run([
-                sys.executable,
-                "run_twitter_plugin.py",
-                "--output-id", str(output.id)
-            ])
+        # Trigger v2 pipeline in background
+        def run_v2_pipeline():
+            output_id = str(output.id)
+            event_id = str(output.event_id)
+            event_type = output.event_type
+            intent = output.intent
 
-        background_tasks.add_task(run_twitter_plugin)
+            print(f"\n[Generate] Starting v2 pipeline generation for output {output_id}")
+
+            # Run v2 pipeline (direct)
+            print(f"[Generate] Running v2 pipeline...")
+            try:
+                # Import here to avoid startup dependency issues
+                from adapters.twitter_direct import TwitterDirectAdapter
+                from adapters.context import ExecutionContext
+                from models.event import Event as PydanticEvent
+                from database.models import Event as DBEvent
+
+                # Get the event
+                db_local = next(get_db())
+                try:
+                    db_event = db_local.query(DBEvent).filter(DBEvent.id == event_id).first()
+                    if not db_event:
+                        print(f"[Generate] ERROR: Event {event_id} not found for v2 pipeline")
+                        return
+
+                    print(f"[Generate] Found event: {db_event.title[:50]}...")
+
+                    # Convert to Pydantic Event
+                    pydantic_event = PydanticEvent(
+                        event_id=db_event.event_id,
+                        source=db_event.source,
+                        title=db_event.title,
+                        summary=db_event.summary or "",
+                        url=db_event.link or "",
+                        country="",
+                        published_at=db_event.published_at.isoformat() if db_event.published_at else ""
+                    )
+
+                    # Create context with existing classification
+                    context = ExecutionContext(event=pydantic_event)
+                    context.event_type = event_type
+                    context.intent = intent
+                    context.db_event_id = str(db_event.id)
+                    context.db_output_id = output_id  # Pass output_id for content_queue foreign key
+
+                    print(f"[Generate] Running TwitterDirectAdapter...")
+                    print(f"[Generate]   Event Type: {event_type}")
+                    print(f"[Generate]   Intent: {intent}")
+
+                    # Run v2 adapter
+                    twitter_direct = TwitterDirectAdapter()
+                    twitter_direct.run(context)
+
+                    print(f"[Generate] v2 pipeline completed successfully")
+
+                except Exception as e:
+                    print(f"[Generate] ERROR in v2 pipeline: {e}")
+                    import traceback
+                    traceback.print_exc()
+                finally:
+                    db_local.close()
+
+            except Exception as e:
+                print(f"[Generate] ERROR importing v2 modules: {e}")
+                import traceback
+                traceback.print_exc()
+
+        background_tasks.add_task(run_v2_pipeline)
 
         return GenerateTwitterContentResponse(
             success=True,
             status="generating",
-            content_queue_id=None  # Will be created by plugin
+            content_queue_id=None  # Will be created by plugins
         )
 
     except HTTPException:
@@ -278,7 +336,9 @@ async def list_twitter_content(
                 published_at=to_ist_datetime(item.published_at),
                 scheduled_for=to_ist_datetime(item.scheduled_for),
                 created_at=to_ist_datetime(item.created_at),
-                updated_at=to_ist_datetime(item.updated_at)
+                updated_at=to_ist_datetime(item.updated_at),
+                pipeline_version=item.pipeline_version,
+                generation_intent=item.generation_intent
             ))
 
         return TwitterContentListResponse(items=items, total=total)
@@ -662,7 +722,7 @@ async def get_publishing_settings():
 @router.post("/regenerate/{content_queue_id}")
 async def regenerate_twitter_content(content_queue_id: str):
     """
-    Regenerate Twitter content for an existing content queue item.
+    Regenerate Twitter content for an existing content queue item using v2 pipeline.
 
     Calls the LLM again to generate a new version of the tweet/thread,
     replacing the existing content.
@@ -673,15 +733,11 @@ async def regenerate_twitter_content(content_queue_id: str):
     Returns:
         Success response with new content
     """
-    from adapters.context import ExecutionContext
-    from adapters.plugins.twitter import (
-        FormatDecisionAdapter,
-        TwitterSingleAdapter,
-        TwitterThreadAdapter,
-        TwitterClarityAdapter,
-        TwitterHITLAdapter
+    from config.twitter_prompts import (
+        get_intent_specific_single_prompt,
+        get_intent_specific_thread_prompt
     )
-    from models.event import Event as EventModel
+    from services.llm_service import get_twitter_llm_service
 
     with get_db_session() as db:
         try:
@@ -713,50 +769,105 @@ async def regenerate_twitter_content(content_queue_id: str):
             if not event:
                 raise HTTPException(status_code=404, detail="Associated event not found")
 
-            # 5. Create ExecutionContext for the adapters
-            event_model = EventModel(
-                event_id=str(event.id),
-                source=event.source or "",
-                title=event.title or "",
-                summary=event.summary or "",
-                url=event.link or "",
-                country="",
-                published_at=event.published_at.isoformat() if event.published_at else ""
-            )
-
-            context = ExecutionContext(
-                event=event_model,
-                event_type=output.event_type,
-                intent=output.intent,
-                llm_output=output.llm_output
-            )
-
-            # 6. Update status to generating
+            # 5. Update status to generating
             content_item.status = "generating"
             content_item.updated_at = get_ist_now()
             db.commit()
 
-            # 7. Run Twitter adapters pipeline
+            # 6. Decide format based on intent (v2 logic)
+            intent = output.intent
+            thread_intents = ["EXPLANATORY", "POLICY"]
+
+            if intent in thread_intents:
+                new_format = "THREAD"
+            else:
+                new_format = "SINGLE"
+
+            print(f"[Regenerate] Format decision: {new_format} for intent {intent}")
+
+            # 7. Generate content using v2 prompts
+            llm = get_twitter_llm_service()
+
             try:
-                # Format Decision
-                format_adapter = FormatDecisionAdapter()
-                context = format_adapter.run(context)
+                if new_format == "SINGLE":
+                    # Generate single tweet
+                    prompt = get_intent_specific_single_prompt(
+                        intent=intent,
+                        event_title=event.title,
+                        poc_content=event.summary or ""
+                    )
 
-                # Generate content based on format
-                if context.twitter_format and context.twitter_format.get("format") == "SINGLE":
-                    single_adapter = TwitterSingleAdapter()
-                    context = single_adapter.run(context)
-                else:
-                    thread_adapter = TwitterThreadAdapter()
-                    context = thread_adapter.run(context)
+                    tweet = llm.generate(prompt).strip()
 
-                # Clarity check
-                clarity_adapter = TwitterClarityAdapter()
-                context = clarity_adapter.run(context)
+                    # Remove quotes if LLM added them
+                    if tweet.startswith('"') and tweet.endswith('"'):
+                        tweet = tweet[1:-1]
+                    if tweet.startswith("'") and tweet.endswith("'"):
+                        tweet = tweet[1:-1]
 
-                # HITL check
-                hitl_adapter = TwitterHITLAdapter()
-                context = hitl_adapter.run(context)
+                    # Enforce length limit
+                    max_length = 280
+                    if len(tweet) > max_length:
+                        print(f"[Regenerate] Tweet exceeds {max_length} chars, truncating")
+                        tweet = tweet[:277] + "..."
+
+                    new_content_text = json.dumps({
+                        "format": "SINGLE",
+                        "content": {
+                            "tweet": tweet
+                        }
+                    })
+                    new_thread_length = 1
+
+                else:  # THREAD
+                    # Generate thread
+                    prompt = get_intent_specific_thread_prompt(
+                        intent=intent,
+                        event_type=output.event_type,
+                        event_title=event.title,
+                        poc_content=event.summary or ""
+                    )
+
+                    raw_output = llm.generate(prompt).strip()
+
+                    # Parse thread (expecting JSON array)
+                    try:
+                        thread_tweets = json.loads(raw_output)
+                        if not isinstance(thread_tweets, list):
+                            raise ValueError("Thread output must be a JSON array")
+                    except json.JSONDecodeError:
+                        # Fallback: split by newlines if not JSON
+                        print(f"[Regenerate] Thread not in JSON format, splitting by lines")
+                        thread_tweets = [t.strip() for t in raw_output.split('\n') if t.strip()]
+
+                    # Validate and enforce length limits
+                    validated_tweets = []
+                    max_length = 280
+                    for tweet in thread_tweets[:3]:  # Max 3 tweets
+                        tweet = tweet.strip()
+
+                        # Remove quotes
+                        if tweet.startswith('"') and tweet.endswith('"'):
+                            tweet = tweet[1:-1]
+                        if tweet.startswith("'") and tweet.endswith("'"):
+                            tweet = tweet[1:-1]
+
+                        # Enforce length
+                        if len(tweet) > max_length:
+                            tweet = tweet[:277] + "..."
+
+                        validated_tweets.append(tweet)
+
+                    if not validated_tweets:
+                        raise ValueError("No valid tweets in thread")
+
+                    new_content_text = json.dumps({
+                        "format": "THREAD",
+                        "content": {
+                            "tweets": validated_tweets
+                        }
+                    })
+                    new_thread_length = len(validated_tweets)
 
             except Exception as gen_error:
                 # Generation failed - mark as failed
@@ -769,77 +880,25 @@ async def regenerate_twitter_content(content_queue_id: str):
                     detail=f"Content regeneration failed: {str(gen_error)}"
                 )
 
-            # 8. Check if generation succeeded
-            if not context.twitter_content:
-                content_item.status = "failed"
-                content_item.error_message = "Regeneration failed: No content generated"
-                content_item.updated_at = get_ist_now()
-                db.commit()
-                raise HTTPException(
-                    status_code=500,
-                    detail="Content regeneration failed: No content generated"
-                )
-
-            # 9. Update content queue with new content
-            new_format = context.twitter_content.get("format", "SINGLE")
-
-            if new_format == "SINGLE":
-                new_content_text = json.dumps({
-                    "format": "SINGLE",
-                    "content": {
-                        "tweet": context.twitter_content.get("tweet", "")
-                    }
-                })
-                new_thread_length = 1
-            else:  # THREAD
-                tweets_dict = context.twitter_content.get("tweets", {})
-                tweets_list = [tweets_dict.get(f"tweet{i}", "") for i in range(1, len(tweets_dict) + 1)]
-                new_content_text = json.dumps({
-                    "format": "THREAD",
-                    "content": {
-                        "tweets": tweets_list
-                    }
-                })
-                new_thread_length = len(tweets_list)
-
-            # Determine new status based on HITL
-            # Handle both dict and HITLDecision object
-            hitl_required = False
-            if context.twitter_hitl:
-                if isinstance(context.twitter_hitl, dict):
-                    hitl_required = context.twitter_hitl.get("required", False)
-                else:
-                    hitl_required = context.twitter_hitl.required
-
-            if hitl_required:
-                new_status = "pending_hitl"
-            else:
-                new_status = "ready_to_schedule"
-
-            # Update the content queue item
+            # 8. Update the content queue item
             content_item.format = new_format
             content_item.content_text = new_content_text
             content_item.thread_length = new_thread_length
-            content_item.status = new_status
+            content_item.status = "ready_to_schedule"  # v2 doesn't use HITL for regeneration
             content_item.edited_content = None  # Clear any previous edits
             content_item.error_message = None
             content_item.updated_at = get_ist_now()
-
-            # Store clarity issues if any
-            if context.twitter_clarity_issues:
-                content_item.clarity_issues = json.dumps(context.twitter_clarity_issues)
-
             db.commit()
 
             print(f"[Regenerate] Content {content_queue_id} regenerated successfully")
-            print(f"             Format: {new_format}, Status: {new_status}")
+            print(f"             Format: {new_format}, Status: ready_to_schedule")
 
             return {
                 "success": True,
                 "content_queue_id": content_queue_id,
                 "format": new_format,
                 "thread_length": new_thread_length,
-                "status": new_status,
+                "status": "ready_to_schedule",
                 "message": "Content regenerated successfully"
             }
 

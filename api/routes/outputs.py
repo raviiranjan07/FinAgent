@@ -25,6 +25,7 @@ async def list_outputs(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     event_type: Optional[str] = None,
+    intent: Optional[str] = None,
     pending_only: bool = False,
     hitl_only: bool = False,
     sort_order: Literal["asc", "desc"] = "desc",
@@ -72,8 +73,14 @@ async def list_outputs(
             )
         elif hitl_only:
             base_query = base_query.filter(Output.hitl_required == True)
-        elif event_type:
+
+        # Apply event_type filter if provided
+        if event_type:
             base_query = base_query.filter(Output.event_type == event_type)
+
+        # Apply intent filter if provided
+        if intent:
+            base_query = base_query.filter(Output.intent == intent)
 
         # Get total count for this filter
         total = base_query.count()
@@ -109,6 +116,7 @@ async def list_outputs(
                 clarity_issues=output.clarity_issues or [],
                 hitl_required=output.hitl_required,
                 hitl_risk_level=output.hitl_risk_level,
+                llm_model=output.llm_model,
                 created_at=output.created_at,
                 event_title=output.event.title if output.event else None,
                 event_source=output.event.source if output.event else None,
@@ -202,6 +210,7 @@ async def get_output(output_id: str):
             clarity_issues=output.clarity_issues or [],
             hitl_required=output.hitl_required,
             hitl_risk_level=output.hitl_risk_level,
+            llm_model=output.llm_model,
             created_at=output.created_at,
             event_title=output.event.title if output.event else None,
             event_source=output.event.source if output.event else None,
@@ -225,3 +234,12 @@ async def list_event_types():
         repo = RepositoryManager(db)
         counts = repo.outputs.count_by_event_type()
         return {"event_types": counts}
+
+
+@router.get("/intents/list")
+async def list_intents():
+    """Get all intents with counts."""
+    with get_db_session() as db:
+        repo = RepositoryManager(db)
+        counts = repo.outputs.count_by_intent()
+        return {"intents": counts}

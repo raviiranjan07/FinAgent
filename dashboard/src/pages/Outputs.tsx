@@ -36,6 +36,7 @@ export function Outputs() {
   const [page, setPage] = useState(1)
   const [pendingOnly, setPendingOnly] = useState(true)
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
+  const [selectedIntent, setSelectedIntent] = useState<string | undefined>(undefined)
   const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null)
   const [failureReason, setFailureReason] = useState("")  // Legacy, kept for backwards compat
   const [correctedEventType, setCorrectedEventType] = useState("")
@@ -70,20 +71,38 @@ export function Outputs() {
   }, [subscribe, queryClient])
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["outputs", page, pendingOnly, sortOrder],
-    queryFn: () => outputsApi.list(page, 20, { pending_only: pendingOnly, sort_order: sortOrder }),
+    queryKey: ["outputs", page, pendingOnly, sortOrder, selectedIntent],
+    queryFn: () => outputsApi.list(page, 20, { pending_only: pendingOnly, sort_order: sortOrder, intent: selectedIntent }),
+  })
+
+  const { data: intentsData } = useQuery({
+    queryKey: ["output-intents"],
+    queryFn: () => outputsApi.getIntents(),
   })
 
   const createEvaluation = useMutation({
     mutationFn: evaluationsApi.create,
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["outputs"] })
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
-      setSelectedOutputId(null)
+
+      // Clear form fields
       setFailureReason("")
       setCorrectedEventType("")
       setCorrectedIntent("")
       setComment("")
+
+      // Auto-generate Twitter content for PASS verdicts
+      if (variables.verdict === "PASS" && selectedOutput) {
+        console.log("[Auto-gen] Triggering Twitter generation for output:", selectedOutput.id)
+        setTwitterGenSuccess(false)
+        setTwitterGenError(null)
+        generateTwitterContent.mutate(selectedOutput.id)
+        // Don't close panel - let user see generation progress
+      } else {
+        // For FAIL/ACCEPT, close panel immediately
+        setSelectedOutputId(null)
+      }
     },
   })
 
@@ -127,20 +146,48 @@ export function Outputs() {
   })
 
   const generateTwitterContent = useMutation({
-    mutationFn: (outputId: string) => twitterApi.generate(outputId),
-    onSuccess: () => {
+    mutationFn: (outputId: string) => {
+      console.log("[Auto-gen] Calling twitterApi.generate for:", outputId)
+      return twitterApi.generate(outputId)
+    },
+    onSuccess: (data) => {
+      console.log("[Auto-gen] Twitter generation successful:", data)
       setTwitterGenSuccess(true)
       setTwitterGenError(null)
-      // Navigate to Generated Content screen after 1 second
+      // Navigate to Generated Content screen after 1.5 seconds
       setTimeout(() => {
+        console.log("[Auto-gen] Navigating to generated-content page")
         navigate("/generated-content")
-      }, 1000)
+        setSelectedOutputId(null) // Close panel after navigation
+      }, 1500)
     },
     onError: (error: any) => {
-      setTwitterGenError(error.response?.data?.message || error.response?.data?.detail || "Failed to generate X content")
+      console.error("[Auto-gen] Twitter generation failed:", error)
+      const errorMsg = error.response?.data?.message || error.response?.data?.detail || "Failed to generate X content"
+      setTwitterGenError(errorMsg)
       setTwitterGenSuccess(false)
+      // Keep panel open so user can see error and retry
     },
   })
+
+  const getIntentColor = (intent: string | null | undefined): string => {
+    if (!intent) return ""
+
+    switch (intent) {
+      case "EXPLANATORY":
+        return "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700"
+      case "DESCRIPTIVE":
+        return "bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600"
+      case "MARKET_OPINION":
+        return "bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-700"
+      case "BREAKING_NEWS":
+        return "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700"
+      case "DATA_RELEASE":
+        return "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700"
+      default:
+        return "bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600"
+    }
+  }
 
   const handleEvaluate = (verdict: "PASS" | "FAIL" | "ACCEPT") => {
     if (!selectedOutput) return
@@ -301,6 +348,34 @@ export function Outputs() {
         </div>
       </div>
 
+      {/* Intent Filter */}
+      <div className="flex gap-2 flex-wrap">
+        <Button
+          variant={selectedIntent === undefined ? "default" : "outline"}
+          size="sm"
+          onClick={() => {
+            setSelectedIntent(undefined)
+            setPage(1)
+          }}
+        >
+          All Intents
+        </Button>
+        {intentsData?.intents && Object.entries(intentsData.intents).map(([intent, count]) => (
+          <Button
+            key={intent}
+            variant={selectedIntent === intent ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              setSelectedIntent(intent)
+              setPage(1)
+            }}
+            className={getIntentColor(intent)}
+          >
+            {intent.replace(/_/g, " ")} ({count as number})
+          </Button>
+        ))}
+      </div>
+
       {/* Selection Controls */}
       {data && data.items && data.items.length > 0 && (
         <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -370,6 +445,14 @@ export function Outputs() {
                       <div className="flex items-center gap-2 flex-wrap text-sm text-muted-foreground">
                         <Badge variant="secondary">{output.event_source}</Badge>
                         <Badge variant="outline">{output.event_type}</Badge>
+                        {output.intent && (
+                          <Badge
+                            variant="outline"
+                            className={getIntentColor(output.intent)}
+                          >
+                            {output.intent.replace(/_/g, " ")}
+                          </Badge>
+                        )}
                         {output.event_published_at && (
                           <span className="text-xs text-gray-600 dark:text-gray-400">
                             Published: {formatDate(output.event_published_at)}
@@ -497,7 +580,12 @@ export function Outputs() {
               {/* Metadata */}
               <div className="flex flex-wrap gap-2">
                 <Badge variant="outline">Type: {selectedOutput.event_type}</Badge>
-                <Badge variant="outline">Intent: {selectedOutput.intent}</Badge>
+                <Badge
+                  variant="outline"
+                  className={getIntentColor(selectedOutput.intent)}
+                >
+                  Intent: {selectedOutput.intent.replace(/_/g, " ")}
+                </Badge>
                 {selectedOutput.llm_model && (
                   <Badge
                     variant="secondary"
@@ -682,62 +770,67 @@ export function Outputs() {
                     </p>
                   </div>
 
-                  {/* Generate X Content Button (PASS or ACCEPT) */}
+                  {/* Auto-generation status for PASS/ACCEPT */}
                   {(selectedOutput.evaluation.verdict === "PASS" || selectedOutput.evaluation.verdict === "ACCEPT") && (
                     <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <h4 className="font-medium mb-3 text-gray-900 dark:text-white">Next Steps:</h4>
-
                       {/* Success Message */}
                       {twitterGenSuccess && (
-                        <div className="mb-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                        <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
                           <div className="flex items-center justify-between">
                             <p className="text-sm text-green-700 dark:text-green-300 flex items-center gap-2">
                               <CheckCircle className="h-4 w-4" />
-                              X content generation started!
+                              X content generation started! Redirecting...
                             </p>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => navigate("/generated-content")}
-                              className="text-xs"
-                            >
-                              View Generated Content
-                              <ArrowRight className="h-3 w-3 ml-1" />
-                            </Button>
                           </div>
                         </div>
                       )}
 
                       {/* Error Message */}
                       {twitterGenError && (
-                        <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                        <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                           <p className="text-sm text-red-700 dark:text-red-300 flex items-center gap-2">
                             <XCircle className="h-4 w-4" />
                             {twitterGenError}
                           </p>
+                          <Button
+                            onClick={() => handleGenerateTwitter()}
+                            disabled={generatingTwitter || generateTwitterContent.isPending}
+                            className="w-full mt-3"
+                            variant="outline"
+                          >
+                            <XLogo className="h-4 w-4 mr-2" />
+                            Retry Generation
+                          </Button>
                         </div>
                       )}
 
-                      <Button
-                        onClick={() => handleGenerateTwitter()}
-                        disabled={generatingTwitter || generateTwitterContent.isPending}
-                        className="w-full"
-                      >
-                        {generatingTwitter || generateTwitterContent.isPending ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Creating Content...
-                          </>
-                        ) : (
-                          <>
+                      {/* Loading state */}
+                      {(generatingTwitter || generateTwitterContent.isPending) && !twitterGenSuccess && !twitterGenError && (
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                          <p className="text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Generating X content automatically...
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Info message for already evaluated items */}
+                      {!twitterGenSuccess && !twitterGenError && !generatingTwitter && !generateTwitterContent.isPending && (
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                          <p className="text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                            <Info className="h-4 w-4" />
+                            X content was automatically generated when this output was approved.
+                          </p>
+                          <Button
+                            onClick={() => navigate("/generated-content")}
+                            className="w-full mt-3"
+                            variant="outline"
+                          >
                             <XLogo className="h-4 w-4 mr-2" />
-                            Create Content
-                          </>
-                        )}
-                      </Button>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-                        This will format the content for X using the plugin pipeline.
-                      </p>
+                            View Generated Content
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -804,6 +897,8 @@ export function Outputs() {
                           <option value="EXPLANATORY">EXPLANATORY</option>
                           <option value="DESCRIPTIVE">DESCRIPTIVE</option>
                           <option value="MARKET_OPINION">MARKET_OPINION</option>
+                          <option value="BREAKING_NEWS">BREAKING_NEWS</option>
+                          <option value="DATA_RELEASE">DATA_RELEASE</option>
                         </select>
                       </div>
                     </div>

@@ -513,6 +513,25 @@ export function GeneratedContent() {
     }
   }
 
+  const getIntentColor = (intent: string | null | undefined): string => {
+    if (!intent) return ""
+
+    switch (intent) {
+      case "EXPLANATORY":
+        return "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700"
+      case "DESCRIPTIVE":
+        return "bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600"
+      case "MARKET_OPINION":
+        return "bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-700"
+      case "BREAKING_NEWS":
+        return "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700"
+      case "DATA_RELEASE":
+        return "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700"
+      default:
+        return "bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600"
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -658,6 +677,14 @@ export function GeneratedContent() {
                     <CardTitle className="text-lg mb-2">{item.event_title}</CardTitle>
                     <div className="flex flex-wrap gap-2 items-center">
                       <Badge variant="outline">{item.event_type}</Badge>
+                      {item.generation_intent && (
+                        <Badge
+                          variant="outline"
+                          className={getIntentColor(item.generation_intent)}
+                        >
+                          {item.generation_intent.replace(/_/g, " ")}
+                        </Badge>
+                      )}
                       <Badge
                         variant={item.format === "THREAD" ? "default" : "secondary"}
                         className="flex items-center gap-1"

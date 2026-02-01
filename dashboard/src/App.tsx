@@ -6,7 +6,7 @@ import { Dashboard } from "./pages/Dashboard"
 import { Outputs } from "./pages/Outputs"
 import { Events } from "./pages/Events"
 import { Stats } from "./pages/Stats"
-import ApprovedQueue from "./pages/ApprovedQueue"
+// import ApprovedQueue from "./pages/ApprovedQueue"  // REMOVED: No longer needed
 import { GeneratedContent } from "./pages/GeneratedContent"
 
 const queryClient = new QueryClient({
@@ -28,7 +28,7 @@ function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/events" element={<Events />} />
               <Route path="/outputs" element={<Outputs />} />
-              <Route path="/approved-queue" element={<ApprovedQueue />} />
+              {/* <Route path="/approved-queue" element={<ApprovedQueue />} /> */}
               <Route path="/generated-content" element={<GeneratedContent />} />
               <Route path="/stats" element={<Stats />} />
             </Routes>

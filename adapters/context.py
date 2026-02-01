@@ -61,6 +61,7 @@ class ExecutionContext(BaseModel):
     # Database IDs (Pre-MVP)
     db_event_id: Optional[str] = None  # PostgreSQL event UUID
     db_output_id: Optional[str] = None  # PostgreSQL output UUID
+    db_session: Optional[Any] = None  # Database session for direct saves (v2 pipeline)
 
     # Generation Metadata (Pre-MVP)
     generation_metadata: Optional[dict] = None  # LLM generation metadata (model, prompt version, etc.)

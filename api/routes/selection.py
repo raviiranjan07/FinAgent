@@ -17,29 +17,9 @@ from utils.timezone import get_ist_now
 router = APIRouter(prefix="/selection", tags=["selection"])
 
 
-class ApprovedQueueItem(BaseModel):
-    """Item in the approved queue (PASS evaluation, awaiting selection)"""
-    output_id: str
-    event_id: str
-    event_title: str
-    event_source: str
-    event_published_at: datetime
-    event_type: str
-    intent: str
-    hitl_risk_level: str
-    clarity_issues: List[str]
-    llm_output: str  # Raw LLM output
-
-
 class DeleteSelectedRequest(BaseModel):
     """Request body for deleting multiple outputs"""
     output_ids: List[str]
-
-
-class ApprovedQueueResponse(BaseModel):
-    """Response for approved queue list"""
-    items: List[ApprovedQueueItem]
-    total: int
 
 
 class SelectForPublishingRequest(BaseModel):
@@ -53,276 +33,74 @@ class SkipContentRequest(BaseModel):
     reason: Optional[str] = None
 
 
-@router.get("/approved-queue", response_model=ApprovedQueueResponse)
-async def get_approved_queue(limit: int = 50, offset: int = 0):
+# DISABLED: Approved Queue removed - users directly generate Twitter content from Outputs page
+# @router.get("/approved-queue", response_model=ApprovedQueueResponse)
+# async def get_approved_queue(limit: int = 50, offset: int = 0):
+#     """
+#     DEPRECATED: This endpoint has been removed.
+#     Users now generate Twitter content directly from the Outputs page after evaluation.
+#     """
+#     pass
+
+
+def generate_v2_content_background(output_id: UUID, event_id: UUID, event_type: str, intent: str):
     """
-    Get all PASS items waiting for user selection.
-
-    Returns outputs where:
-    - evaluation.verdict = PASS
-    - No content_queue entry (not yet approved for generation)
-
-    These are items that passed quality check but haven't been selected
-    for publishing yet.
-    """
-    with get_db_session() as db:
-        repo = RepositoryManager(db)
-
-        # Get PASS outputs not yet in content queue
-        # This query needs to join outputs -> evaluations -> content_queue
-        # and filter for verdict=PASS and no queue entry
-
-        from database.models import Output, Evaluation, Event, ContentQueue
-        from sqlalchemy import and_, or_
-        from sqlalchemy.orm import joinedload, outerjoin
-
-        # Use subquery approach to avoid issues with multiple evaluations per output
-        # Step 1: Get output IDs that have PASS evaluation and are NOT in content_queue yet
-        from sqlalchemy import distinct
-
-        subquery = (
-            db.query(distinct(Output.id))
-            .join(Evaluation, Evaluation.output_id == Output.id)
-            .outerjoin(ContentQueue, ContentQueue.output_id == Output.id)
-            .filter(
-                and_(
-                    Evaluation.verdict == "PASS",
-                    ContentQueue.id.is_(None)  # Not in queue yet
-                )
-            )
-        ).subquery()
-
-        # Step 2: Query full Output objects for those IDs
-        query = (
-            db.query(Output)
-            .filter(Output.id.in_(db.query(subquery)))
-            .options(
-                joinedload(Output.event),
-                joinedload(Output.evaluations)
-            )
-            .order_by(Output.created_at.desc())
-        )
-
-        total = query.count()
-        items_db = query.offset(offset).limit(limit).all()
-
-        items = []
-        for output in items_db:
-            # Get the PASS evaluation
-            pass_eval = next((e for e in output.evaluations if e.verdict == "PASS"), None)
-
-            items.append(ApprovedQueueItem(
-                output_id=str(output.id),
-                event_id=str(output.event_id),
-                event_title=output.event.title if output.event else "",
-                event_source=output.event.source if output.event else "",
-                event_published_at=(output.event.published_at if (output.event and output.event.published_at) else get_ist_now()),
-                event_type=output.event_type,
-                intent=output.intent,
-                hitl_risk_level=output.hitl_risk_level,
-                clarity_issues=output.clarity_issues or [],
-                llm_output=output.llm_output,
-                created_at=output.created_at,
-                approved_at=pass_eval.evaluated_at if pass_eval else None
-            ))
-
-        return ApprovedQueueResponse(items=items, total=total)
-
-
-def generate_content_background(queue_id: UUID):
-    """
-    Background task to generate Twitter content for a queue item.
-
-    Uses proper Twitter adapters for format decision (SINGLE vs THREAD).
+    Background task to generate v2 Twitter content using TwitterDirectAdapter.
 
     Args:
-        queue_id: ID of the ContentQueue item to process
+        output_id: ID of the Output being processed
+        event_id: ID of the Event
+        event_type: Event classification
+        intent: Content intent
     """
-    import json
-    from database.models import Output, ContentQueue
-    from database.models import Event as DBEvent
-    from models.event import Event as EventModel
-    from adapters.context import ExecutionContext
-    from adapters.plugins.twitter import (
-        FormatDecisionAdapter,
-        TwitterSingleAdapter,
-        TwitterThreadAdapter,
-        TwitterClarityAdapter,
-        TwitterHITLAdapter
-    )
-    from config.settings import TWITTER_PROMPT_VERSION
-    from services.llm_service import get_twitter_llm_service
+    print(f"\n[Generate v2] Starting v2 pipeline for output {output_id}")
 
-    with get_db_session() as db:
-        try:
-            # Get queue item
-            queue_item = db.query(ContentQueue).filter(ContentQueue.id == queue_id).first()
-            if not queue_item:
-                print(f"[ERROR] Queue item {queue_id} not found")
+    try:
+        from adapters.twitter_direct import TwitterDirectAdapter
+        from adapters.context import ExecutionContext
+        from models.event import Event as PydanticEvent
+        from database.models import Event as DBEvent
+
+        # Get the event
+        with get_db_session() as db:
+            db_event = db.query(DBEvent).filter(DBEvent.id == event_id).first()
+            if not db_event:
+                print(f"[Generate v2] ERROR: Event {event_id} not found")
                 return
 
-            # Update status to generating
-            queue_item.status = "generating"
-            db.commit()
+            print(f"[Generate v2] Found event: {db_event.title[:50]}...")
 
-            print(f"[+] Processing queue item {queue_id} for output {queue_item.output_id}")
-
-            # Get the output with event relationship
-            from sqlalchemy.orm import joinedload
-            output = db.query(Output).options(joinedload(Output.event)).filter(Output.id == queue_item.output_id).first()
-            if not output:
-                raise ValueError(f"Output {queue_item.output_id} not found")
-
-            event = output.event
-            if not event:
-                raise ValueError(f"Event not found for output {queue_item.output_id}")
-
-            # Create ExecutionContext for adapters
-            event_model = EventModel(
-                event_id=str(event.id),
-                source=event.source or "",
-                title=event.title or "",
-                summary=event.summary or "",
-                url=event.link or "",
+            # Convert to Pydantic Event
+            pydantic_event = PydanticEvent(
+                event_id=db_event.event_id,
+                source=db_event.source,
+                title=db_event.title,
+                summary=db_event.summary or "",
+                url=db_event.link or "",
                 country="",
-                published_at=event.published_at.isoformat() if event.published_at else ""
+                published_at=db_event.published_at.isoformat() if db_event.published_at else ""
             )
 
-            context = ExecutionContext(
-                event=event_model,
-                event_type=output.event_type,
-                intent=output.intent,
-                llm_output=output.llm_output
-            )
+            # Create context with existing classification
+            context = ExecutionContext(event=pydantic_event)
+            context.event_type = event_type
+            context.intent = intent
+            context.db_event_id = str(db_event.id)
 
-            # Run Twitter adapters pipeline
-            print(f"[+] Running Twitter adapters for event_type={output.event_type}, intent={output.intent}")
+            print(f"[Generate v2] Running TwitterDirectAdapter...")
+            print(f"[Generate v2]   Event Type: {event_type}")
+            print(f"[Generate v2]   Intent: {intent}")
 
-            # Step 1: Format Decision (decides SINGLE vs THREAD)
-            format_adapter = FormatDecisionAdapter()
-            context = format_adapter.run(context)
+            # Run v2 adapter
+            twitter_direct = TwitterDirectAdapter()
+            twitter_direct.run(context)
 
-            twitter_format = context.twitter_format
-            if not twitter_format:
-                raise ValueError("Format decision failed")
+            print(f"[Generate v2] v2 pipeline completed successfully")
 
-            format_type = twitter_format.get("format", "SINGLE")
-            print(f"[+] Format decision: {format_type}")
-
-            # Step 2: Generate content based on format
-            if format_type == "SINGLE":
-                single_adapter = TwitterSingleAdapter()
-                context = single_adapter.run(context)
-            else:
-                thread_adapter = TwitterThreadAdapter()
-                context = thread_adapter.run(context)
-
-            # Step 3: Clarity validation
-            clarity_adapter = TwitterClarityAdapter()
-            context = clarity_adapter.run(context)
-
-            # Step 4: HITL decision
-            hitl_adapter = TwitterHITLAdapter()
-            context = hitl_adapter.run(context)
-
-            # Check if generation succeeded
-            if not context.twitter_content:
-                raise ValueError("Content generation failed - no content returned from LLM")
-
-            # Prepare content for database
-            if format_type == "SINGLE":
-                content_text = json.dumps({
-                    "format": "SINGLE",
-                    "content": {
-                        "tweet": context.twitter_content.get("tweet", "")
-                    }
-                })
-                thread_length = 1
-                char_count = context.twitter_content.get("char_count", len(context.twitter_content.get("tweet", "")))
-            else:  # THREAD
-                tweets_dict = context.twitter_content.get("tweets", {})
-                tweet_count = context.twitter_content.get("tweet_count", len(tweets_dict))
-                tweets_list = [tweets_dict.get(f"tweet{i}", "") for i in range(1, tweet_count + 1)]
-                content_text = json.dumps({
-                    "format": "THREAD",
-                    "content": {
-                        "tweets": tweets_list
-                    }
-                })
-                thread_length = len(tweets_list)
-                char_count = sum(len(t) for t in tweets_list)
-
-            # Get HITL decision
-            hitl_required = False
-            hitl_risk_level = "LOW"
-            suggested_verdict = "PASS"
-            suggested_verdict_reason = None
-
-            if context.twitter_hitl:
-                if isinstance(context.twitter_hitl, dict):
-                    hitl_required = context.twitter_hitl.get("required", False)
-                    hitl_risk_level = context.twitter_hitl.get("risk_level", "LOW")
-                    suggested_verdict = context.twitter_hitl.get("suggested_verdict", "PASS")
-                    suggested_verdict_reason = context.twitter_hitl.get("suggested_verdict_reason")
-                else:
-                    hitl_required = context.twitter_hitl.required
-                    hitl_risk_level = context.twitter_hitl.risk_level
-                    suggested_verdict = context.twitter_hitl.suggested_verdict
-                    suggested_verdict_reason = context.twitter_hitl.suggested_verdict_reason
-
-            # Update ContentQueue with generated content
-            queue_item.format = format_type  # <-- THIS WAS MISSING!
-            queue_item.thread_length = thread_length
-            queue_item.content_text = content_text
-            queue_item.hitl_required = hitl_required
-            queue_item.hitl_risk_level = hitl_risk_level
-            queue_item.suggested_verdict = suggested_verdict
-            queue_item.suggested_verdict_reason = suggested_verdict_reason
-
-            # Set versioning metadata
-            llm_service = get_twitter_llm_service()
-            queue_item.plugin_version = f"twitter-{TWITTER_PROMPT_VERSION}"
-            queue_item.prompt_version = TWITTER_PROMPT_VERSION
-            queue_item.model_used = llm_service.model_name if hasattr(llm_service, 'model_name') else "unknown"
-            queue_item.generation_timestamp = get_ist_now()
-            queue_item.generation_context = {
-                "event_type": output.event_type,
-                "intent": output.intent,
-                "format_reason": twitter_format.get("reason", ""),
-                "clarity_issues": getattr(context, 'twitter_clarity_issues', []),
-            }
-
-            # Set status based on HITL
-            if hitl_required:
-                queue_item.status = "pending_hitl"
-                print(f"[HITL] Content requires human review - blocking at pending_hitl status")
-                print(f"       Risk Level: {hitl_risk_level}")
-                print(f"       Suggested Verdict: {suggested_verdict}")
-            else:
-                queue_item.status = "ready_to_schedule"
-                print(f"[HITL] No review required - moving to ready_to_schedule")
-
-            queue_item.error_message = None
-            queue_item.updated_at = get_ist_now()
-            db.commit()
-
-            print(f"[OK] Generated content for queue item {queue_id}")
-            print(f"    Format: {format_type}")
-            print(f"    Thread Length: {thread_length}")
-            print(f"    Characters: {char_count}")
-
-        except Exception as e:
-            # Mark as failed with error message
-            queue_item = db.query(ContentQueue).filter(ContentQueue.id == queue_id).first()
-            if queue_item:
-                queue_item.status = "failed"
-                queue_item.error_message = str(e)
-                queue_item.updated_at = get_ist_now()
-                db.commit()
-
-            print(f"[ERROR] Failed to process queue item {queue_id}: {e}")
-            import traceback
-            traceback.print_exc()
+    except Exception as e:
+        print(f"[Generate v2] ERROR: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 @router.post("/approve-for-generation")
@@ -403,8 +181,8 @@ async def approve_for_generation(
                 db.add(queue_item)
                 db.commit()
 
-                # Add background task to generate content
-                background_tasks.add_task(generate_content_background, queue_item.id)
+                # Add background task to generate v2 content
+                background_tasks.add_task(generate_v2_content_background, output.id, output.event_id, output.event_type, output.intent)  # v2 pipeline
 
                 results.append({
                     "output_id": output_id_str,

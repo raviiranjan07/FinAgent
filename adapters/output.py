@@ -108,7 +108,7 @@ class ContextAdapter(BaseAdapter):
         start_time = time.time()
 
         # Get intent-specific task
-        # task = INTENT_TASKS.get(context.intent, INTENT_TASKS["DESCRIPTIVE"])
+        task = INTENT_TASKS.get(context.intent, INTENT_TASKS["DESCRIPTIVE"])
 
         # Truncate content if too large (prevents LLM timeout on heavy data)
         content = context.event.summary
@@ -125,11 +125,13 @@ class ContextAdapter(BaseAdapter):
 
         EVENT CONTENT:
         {content}
+        
+        # TASK:
+         {task}
 
         """
         
-        # TASK:
-        # {task}
+       
         
         # First attempt
         llm_output = self._call_llm_with_retry(prompt, context.event.event_id)

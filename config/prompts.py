@@ -273,6 +273,13 @@ Twitter Prompts:
 As per documentation Section 6.2 Core System Prompt.
 """
 
+import os
+
+# Feature flag for intent-specific prompts
+# Set USE_INTENT_SPECIFIC_PROMPTS=true (default) to use intent-optimized prompts
+# Set USE_INTENT_SPECIFIC_PROMPTS=false to rollback to v4.4-friction/v5.9-tension prompts
+USE_INTENT_SPECIFIC_PROMPTS = os.getenv("USE_INTENT_SPECIFIC_PROMPTS", "true").lower() == "true"
+
 # SYSTEM PROMPT - v1.1 Updated for POC improvements
 SYSTEM_PROMPT = """You are an AI system designed to interpret finance-related events responsibly.
     Your task is to explain factual financial, economic, or policy events in a
@@ -669,13 +676,29 @@ TWITTER_CONTENT_STRATEGIES = {
 # Single tweet generation template
 def get_twitter_single_prompt(event_title: str, event_type: str, intent: str, poc_content: str, version: str = None) -> str:
     """
-    Generate prompt for single tweet with ChatGPT-style framing.
+    Generate prompt for single tweet.
+
+    If USE_INTENT_SPECIFIC_PROMPTS=true and version=None, uses intent-specific prompts.
+    Otherwise, falls back to base prompts with strategy injection.
 
     Args:
+        event_title: Event title
+        event_type: Event classification
+        intent: Content intent (BREAKING_NEWS, DATA_RELEASE, DESCRIPTIVE, MARKET_OPINION, EXPLANATORY)
+        poc_content: Approved POC content
         version: Optional prompt version (e.g., "v4.4-friction", "v4.3-nosig").
-                 If None, uses CURRENT_VERSIONS from prompt_versions.py
+                 If None, uses intent-specific prompts (if enabled) or CURRENT_VERSIONS from prompt_versions.py
     """
-    # Get content strategy based on event type or intent
+    # Try intent-specific prompts first (if feature enabled and no specific version requested)
+    if USE_INTENT_SPECIFIC_PROMPTS and version is None:
+        try:
+            from config.twitter_prompts import get_intent_specific_single_prompt
+            return get_intent_specific_single_prompt(intent, event_title, poc_content)
+        except (ImportError, ValueError) as e:
+            print(f"[WARNING] Intent-specific single prompt failed ({e}), using fallback")
+            # Continue to fallback below
+
+    # Fallback: old system with strategy injection
     strategy = TWITTER_CONTENT_STRATEGIES.get(event_type, "")
     if not strategy and intent in TWITTER_CONTENT_STRATEGIES:
         strategy = TWITTER_CONTENT_STRATEGIES[intent]
@@ -741,13 +764,29 @@ TWITTER_THREAD_STRATEGIES = {
 # Thread generation template
 def get_twitter_thread_prompt(event_title: str, event_type: str, intent: str, poc_content: str, version: str = None) -> str:
     """
-    Generate prompt for dynamic-length thread (2-6 tweets) with ChatGPT-style framing.
+    Generate prompt for thread (6 tweets).
+
+    If USE_INTENT_SPECIFIC_PROMPTS=true and version=None, uses intent-specific prompts.
+    Otherwise, falls back to base prompts with strategy injection.
 
     Args:
+        event_title: Event title
+        event_type: Event classification (FINANCE_POLICY, MACRO_ECONOMIC, etc.)
+        intent: Content intent (EXPLANATORY, etc.)
+        poc_content: Approved POC content
         version: Optional prompt version (e.g., "v5.1-friction", "v5.0-compact").
-                 If None, uses CURRENT_VERSIONS from prompt_versions.py
+                 If None, uses intent-specific prompts (if enabled) or CURRENT_VERSIONS from prompt_versions.py
     """
-    # Get thread strategy
+    # Try intent-specific prompts first (if feature enabled and no specific version requested)
+    if USE_INTENT_SPECIFIC_PROMPTS and version is None:
+        try:
+            from config.twitter_prompts import get_intent_specific_thread_prompt
+            return get_intent_specific_thread_prompt(intent, event_type, event_title, poc_content)
+        except (ImportError, ValueError) as e:
+            print(f"[WARNING] Intent-specific thread prompt failed ({e}), using fallback")
+            # Continue to fallback below
+
+    # Fallback: old system with strategy injection
     strategy = TWITTER_THREAD_STRATEGIES.get(event_type)
     if not strategy and intent in TWITTER_THREAD_STRATEGIES:
         strategy = TWITTER_THREAD_STRATEGIES[intent]
