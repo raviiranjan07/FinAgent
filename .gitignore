@@ -70,7 +70,6 @@ api/nul
 
 # Backup files
 *.backup
-*.sql
 # BUT allow migration files
 !database/migrations/*.sql
 
